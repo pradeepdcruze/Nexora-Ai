@@ -4,9 +4,19 @@ export interface UserProfile {
   email: string;
   avatar_url?: string;
   headline: string;
+  bio?: string;
+  phone?: string;
   career_goal: string;
   target_roles: string[];
   location: string;
+  education?: string;
+  social_links?: {
+    github?: string;
+    linkedin?: string;
+    website?: string;
+  };
+  theme?: "dark" | "light";
+  skills?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -35,14 +45,19 @@ export interface ResumeData {
   }[];
   education: {
     degree: string;
+    department?: string;
     institution: string;
     year: string;
+    gpa?: string;
+    duration?: string;
   }[];
   certifications: string[];
+  confidence_score?: number;
 }
 
 export interface InterviewSession {
   id: string;
+  user_id?: string;
   interview_type: 'HR' | 'Behavioral' | 'Technical' | 'Role-specific';
   target_role: string;
   difficulty: 'Entry Level' | 'Intermediate' | 'Advanced' | 'Senior';
@@ -51,15 +66,41 @@ export interface InterviewSession {
     communication: number;
     technical: number;
     confidence: number;
-    relevance: number;
+    grammar: number;
+    completeness: number;
+    problem_solving: number;
+    relevance?: number;
+  };
+  feedback_report?: {
+    strengths: string[];
+    weaknesses: string[];
+    ai_feedback: string;
+    improvement_tip: string;
+    recommended_topics: string[];
+    interview_readiness: 'Needs Practice' | 'Developing' | 'Interview Ready' | 'Exceptional';
   };
   transcript: {
     question: string;
     answer: string;
     feedback: string;
     score: number;
-    ideal_response: string;
+    ideal_response?: string;
+    // Strict relevance-first evaluator fields
+    verdict?: "Excellent" | "Good" | "Average" | "Poor" | "Unrelated";
+    relevance?: number;
+    final_score?: number;
+    missing_points?: string[];
+    strengths?: string[];
+    category_scores?: {
+      technical: number;
+      communication: number;
+      confidence: number;
+      grammar: number;
+      completeness: number;
+      problem_solving: number;
+    };
   }[];
+  questions?: string[];
   completed_at: string;
 }
 
@@ -84,6 +125,9 @@ export interface ProgressMetric {
   interview_score: number;
   skill_growth: number;
   quizzes_completed: number;
+  communication_trend?: number;
+  technical_trend?: number;
+  confidence_trend?: number;
 }
 
 export interface CareerTwinSummary {

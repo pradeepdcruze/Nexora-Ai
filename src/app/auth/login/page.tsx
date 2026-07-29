@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { authService } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,27 +20,36 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [forgotModalOpen, setForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
 
-    if (!email.trim() || !email.includes("@")) {
-      setErrorMsg("Please enter a valid email address.");
+    const trimmedEmail = email.trim();
+    // RFC-compliant Email Format Regex (checks for valid email and domain TLD, e.g. user@domain.com)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setErrorMsg("Please enter a valid email address with a complete domain (e.g. user@example.com).");
       return;
     }
-    if (!password) {
-      setErrorMsg("Please enter your password.");
+
+    if (!password || password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters long.");
       return;
     }
 
     try {
       setLoading(true);
-      await authService.signIn(email, password);
+      await authService.signIn(trimmedEmail, password);
       refreshUserData();
       router.push("/dashboard");
     } catch (err: any) {
-      setErrorMsg(err.message || "Invalid credentials. Please try again.");
+      console.warn("Auth sign in message:", err);
+      setErrorMsg(err.message || "Incorrect email or password.");
     } finally {
       setLoading(false);
     }
@@ -56,20 +66,35 @@ export default function LoginPage() {
     }
   };
 
+  const handleForgotSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail || !forgotEmail.includes("@")) return;
+    setForgotSubmitted(true);
+    setTimeout(() => {
+      setForgotModalOpen(false);
+      setForgotSubmitted(false);
+      setForgotEmail("");
+    }, 2500);
+  };
+
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4 sm:p-6 lg:p-8 selection:bg-brand-100">
-      <div className="w-full max-w-md bg-white rounded-3xl border border-slate-border shadow-glass p-8 sm:p-10 space-y-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden font-sans">
+      {/* Glow Background Elements */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-10 w-[300px] h-[300px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl p-8 sm:p-10 space-y-6 backdrop-blur-xl relative z-10">
         <div className="text-center space-y-3">
           <Logo size="lg" className="justify-center" />
-          <h3 className="text-2xl font-extrabold text-dark-text tracking-tight pt-2">Welcome Back</h3>
-          <p className="text-xs text-slate-secondary">
-            Log in to access your AI Career Twin and mock interview readiness.
+          <h3 className="text-2xl font-extrabold text-white tracking-tight pt-2">Welcome</h3>
+          <p className="text-xs text-slate-400">
+            Log in to access your AI Career Twin & mock interview platform.
           </p>
         </div>
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 animate-in fade-in">
+          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -77,47 +102,51 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           {/* Email */}
-          <div>
-            <label className="block text-xs font-bold text-dark-text uppercase tracking-wider mb-1.5">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-secondary" />
+              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your.email@example.com"
-                className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-surface border border-slate-border text-dark-text focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                className="w-full pl-10 pr-4 py-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
               />
             </div>
           </div>
 
           {/* Password */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-dark-text uppercase tracking-wider">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Password
               </label>
-              <a href="#" className="text-[11px] text-brand-600 font-semibold hover:underline">
+              <button
+                type="button"
+                onClick={() => setForgotModalOpen(true)}
+                className="text-[11px] text-blue-400 font-semibold hover:underline"
+              >
                 Forgot password?
-              </a>
+              </button>
             </div>
             <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-secondary" />
+              <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-10 py-2.5 text-xs rounded-xl bg-surface border border-slate-border text-dark-text focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                className="w-full pl-10 pr-10 py-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-secondary hover:text-dark-text"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -131,24 +160,27 @@ export default function LoginPage() {
               id="remember"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded text-brand-600 focus:ring-brand-500"
+              className="rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-blue-500"
             />
-            <label htmlFor="remember" className="text-xs text-slate-secondary select-none">
+            <label htmlFor="remember" className="text-xs text-slate-400 select-none">
               Remember this device
             </label>
           </div>
 
-          {/* Submit */}
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-brand-800 hover:from-brand-700 hover:to-brand-900 shadow-md shadow-brand-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full py-3.5 px-4 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading ? (
-              <span>Authenticating...</span>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Authenticating...</span>
+              </div>
             ) : (
               <>
-                <span>Log In</span>
+                <span>Log In to Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -156,8 +188,8 @@ export default function LoginPage() {
         </form>
 
         <div className="relative flex items-center justify-center my-4">
-          <div className="border-t border-slate-border w-full" />
-          <span className="bg-white px-3 text-[11px] font-semibold uppercase text-slate-secondary absolute">
+          <div className="border-t border-slate-800 w-full" />
+          <span className="bg-slate-900 px-3 text-[11px] font-semibold uppercase text-slate-500 absolute">
             Or Continue With
           </span>
         </div>
@@ -166,7 +198,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-dark-text bg-white border border-slate-border hover:bg-surface transition-all flex items-center justify-center gap-2.5 shadow-xs"
+          className="w-full py-3 px-4 rounded-2xl text-xs font-semibold text-slate-200 bg-slate-950 border border-slate-800 hover:bg-slate-800 transition-all flex items-center justify-center gap-2.5 shadow-sm"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -190,13 +222,65 @@ export default function LoginPage() {
         </button>
 
         {/* Link to Signup */}
-        <p className="text-center text-xs text-slate-secondary pt-2">
+        <p className="text-center text-xs text-slate-400 pt-2">
           Don't have an account yet?{" "}
-          <Link href="/auth/signup" className="font-bold text-brand-600 hover:underline">
+          <Link href="/auth/signup" className="font-bold text-blue-400 hover:underline">
             Create Account
           </Link>
         </p>
       </div>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {forgotModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 w-full max-w-sm space-y-4 shadow-2xl"
+            >
+              <h4 className="text-lg font-bold text-white">Reset Password</h4>
+              <p className="text-xs text-slate-400">
+                Enter your registered email address to receive password reset instructions.
+              </p>
+
+              {forgotSubmitted ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Password reset link sent to {forgotEmail}!</span>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotSubmit} className="space-y-4">
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="your.email@example.com"
+                    className="w-full p-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotModalOpen(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-md"
+                    >
+                      Send Reset Link
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

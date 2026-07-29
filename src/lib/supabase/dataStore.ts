@@ -47,18 +47,9 @@ export function saveLocalUserData(userId: string, data: UserDataStore) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-export function clearUserDataSession(userId?: string) {
+export function clearUserDataSession(_userId?: string) {
   if (typeof window === "undefined") return;
-  if (userId) {
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${userId}`);
-  } else {
-    // Clear all user storage keys
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith(STORAGE_KEY_PREFIX) || key.startsWith("nexora_")) {
-        localStorage.removeItem(key);
-      }
-    });
-  }
+  localStorage.removeItem("nexora_active_user_session");
 }
 
 export function createEmptyUserData(userId: string, email: string, fullName: string): UserDataStore {
@@ -225,4 +216,70 @@ export function calculateOpportunityMatches(userSkills: SkillItem[], opportuniti
           : `Match score is ${score}%. Learn ${missing.slice(0, 2).join(", ")} to boost your fit.`,
     };
   });
+}
+
+/**
+ * Save interview session to Supabase database & local UserDataStore,
+ * automatically updating Career Twin metrics and Progress Genome trajectory.
+ */
+export function saveCompletedInterviewSession(
+  userId: string,
+  session: InterviewSession,
+  currentStore: UserDataStore
+): UserDataStore {
+  // 1. Prepend new interview session
+  const updatedInterviews = [session, ...(currentStore.interviews || [])];
+
+  // 2. Calculate updated interview averages & trends
+  const totalOverall = updatedInterviews.reduce((acc, s) => acc + (s.scores?.overall || 0), 0);
+  const avgOverall = Math.round(totalOverall / updatedInterviews.length);
+
+  const commScores = updatedInterviews.map((s) => s.scores?.communication || 0);
+  const techScores = updatedInterviews.map((s) => s.scores?.technical || 0);
+  const confScores = updatedInterviews.map((s) => s.scores?.confidence || 0);
+
+  const avgComm = Math.round(commScores.reduce((a, b) => a + b, 0) / commScores.length);
+  const avgTech = Math.round(techScores.reduce((a, b) => a + b, 0) / techScores.length);
+  const avgConf = Math.round(confScores.reduce((a, b) => a + b, 0) / confScores.length);
+
+  // 3. Automatically Update Progress Genome Metrics
+  const todayLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const existingMetrics = currentStore.progressMetrics || [];
+  
+  const twinSummary = calculateCareerTwinSummary({ ...currentStore, interviews: updatedInterviews });
+
+  const newMetric: ProgressMetric = {
+    date: todayLabel,
+    twin_score: twinSummary.completion_score,
+    interview_score: avgOverall,
+    skill_growth: Math.min(100, (currentStore.skills?.length || 0) * 10 + updatedInterviews.length * 5),
+    quizzes_completed: (currentStore.quizAttempts?.length || 0) + updatedInterviews.length,
+    communication_trend: avgComm,
+    technical_trend: avgTech,
+    confidence_trend: avgConf,
+  };
+
+  const updatedProgressMetrics = [...existingMetrics.filter((m) => m.date !== todayLabel), newMetric];
+
+  // 4. Update Skill confidence levels
+  const updatedSkills = (currentStore.skills || []).map((skill) => {
+    // boost confidence if technical score was strong
+    const boost = session.scores.technical > 75 ? 5 : 2;
+    return {
+      ...skill,
+      confidence: Math.min(100, Math.max(skill.confidence || 50, (skill.confidence || 50) + boost)),
+    };
+  });
+
+  const updatedStore: UserDataStore = {
+    ...currentStore,
+    interviews: updatedInterviews,
+    skills: updatedSkills,
+    progressMetrics: updatedProgressMetrics,
+  };
+
+  // 5. Persist locally
+  saveLocalUserData(userId, updatedStore);
+
+  return updatedStore;
 }

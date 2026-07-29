@@ -1,6 +1,8 @@
 import type { Config } from "tailwindcss";
+import colors from "tailwindcss/colors";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -25,16 +27,23 @@ const config: Config = {
           900: "#1E3A8A", // Dark blue
           950: "#172554",
         },
+        "cyan-accent": "#38BDF8",
+        "dark-text": "#0F172A",
+        "dark-muted": "#475569",
+        "slate-secondary": "#64748B",
+        "slate-border": "#E2E8F0",
+        slate: {
+          ...colors.slate,
+          secondary: "#64748B",
+          border: "#E2E8F0",
+        },
         cyan: {
-          accent: "#38BDF8", // Accent cyan
+          ...colors.cyan,
+          accent: "#38BDF8",
         },
         dark: {
-          text: "#0F172A", // Primary text
+          text: "#0F172A",
           muted: "#475569",
-        },
-        slate: {
-          secondary: "#64748B", // Secondary text
-          border: "#E2E8F0", // Borders
         },
       },
       fontFamily: {

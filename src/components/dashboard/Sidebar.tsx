@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { memo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
@@ -22,7 +22,7 @@ interface SidebarProps {
   setMobileOpen: (open: boolean) => void;
 }
 
-export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
   const pathname = usePathname();
   const { logout } = useAuth();
 
@@ -31,7 +31,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
     { label: "AI Career Twin", href: "/career-twin", icon: UserCheck },
     { label: "Resume Intelligence", href: "/resume", icon: FileText },
     { label: "AI Mock Interviews", href: "/interviews", icon: Video },
-    { label: "Career Opportunities", href: "/opportunities", icon: Compass },
+    { label: "Opportunity Scanner", href: "/opportunities", icon: Compass },
     { label: "Progress Genome", href: "/progress", icon: TrendingUp },
     { label: "Settings", href: "/settings", icon: Settings },
   ];
@@ -40,43 +40,45 @@ export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
     <>
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-dark-text/40 backdrop-blur-xs z-40 lg:hidden"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-white border-r border-slate-border flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-200 ease-in-out lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-8">
+        <div className="p-6 space-y-8">
+          <div className="flex items-center justify-between">
             <Logo size="md" />
             <button
               onClick={() => setMobileOpen(false)}
-              className="lg:hidden text-slate-secondary hover:text-dark-text"
+              className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all duration-150 ${
                     isActive
-                      ? "bg-brand-50 text-brand-600 border border-brand-200/60 shadow-xs"
-                      : "text-slate-secondary hover:text-dark-text hover:bg-surface"
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-600/20 font-bold"
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/80"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-secondary"}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -84,10 +86,13 @@ export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
           </nav>
         </div>
 
-        <div className="p-4 border-t border-slate-border">
+        <div className="p-6 border-t border-slate-800">
           <button
-            onClick={() => logout()}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-secondary hover:text-red-600 hover:bg-red-50 transition-all"
+            onClick={() => {
+              logout();
+              setMobileOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold text-red-400 hover:bg-red-500/10 hover:border-red-500/30 border border-transparent transition-all"
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
@@ -96,4 +101,4 @@ export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
       </aside>
     </>
   );
-}
+});

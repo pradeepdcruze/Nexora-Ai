@@ -123,24 +123,6 @@ export async function POST(req: NextRequest) {
 
     // 7. Extract local structured data & deduplicate skills
     const localAnalysis = parseResumeFileContent(fileName, trimmedText);
-
-    // 8. Validate Environment & AI API Capability
-    const envCaps = validateEnvironment();
-    let analysisMode: "local" | "ai" = "local";
-    let noticeMessage = "Basic resume analysis completed. Advanced AI insights are unavailable.";
-
-    if (envCaps.hasAiKey) {
-      try {
-        // AI API Key exists; attempt advanced analysis simulation / API call
-        analysisMode = "ai";
-        noticeMessage = `Advanced AI analysis completed using ${envCaps.aiProvider.toUpperCase()} provider.`;
-      } catch (aiErr) {
-        console.warn("AI API analysis failed, falling back to local extraction:", aiErr);
-        analysisMode = "local";
-        noticeMessage = "AI analysis encountered an error. Applied local basic extraction fallback.";
-      }
-    }
-
     const resumeId = `res_${Date.now()}`;
 
     // Return structured API response
@@ -154,10 +136,10 @@ export async function POST(req: NextRequest) {
         education: localAnalysis.education,
         certifications: localAnalysis.certifications,
         completenessScore: localAnalysis.completenessScore,
+        confidenceScore: localAnalysis.confidenceScore,
         rawTextLength: trimmedText.length,
       },
-      analysisMode,
-      message: noticeMessage,
+      message: "Resume analyzed successfully.",
     });
   } catch (error: any) {
     console.error("Critical error in /api/resume/parse:", error);

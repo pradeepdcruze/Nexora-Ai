@@ -13,9 +13,15 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     email TEXT NOT NULL UNIQUE,
     avatar_url TEXT,
     headline TEXT DEFAULT 'Early Career Professional | Aspiring Software Engineer',
+    bio TEXT,
+    phone TEXT,
     career_goal TEXT DEFAULT 'Land a Full-Stack Engineering role at a high-growth Tech SaaS company',
     target_roles TEXT[] DEFAULT ARRAY['Junior Software Engineer', 'Full-Stack Developer', 'Frontend Developer'],
     location TEXT DEFAULT 'San Francisco, CA (Open to Remote)',
+    education TEXT,
+    social_links JSONB DEFAULT '{}'::jsonb,
+    theme TEXT DEFAULT 'dark',
+    skills TEXT[] DEFAULT ARRAY[]::TEXT[],
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -103,11 +109,14 @@ CREATE TABLE IF NOT EXISTS public.interview_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     interview_type TEXT NOT NULL CHECK (interview_type IN ('HR', 'Behavioral', 'Technical', 'Role-specific')),
-    target_role TEXT NOT NULL,
+    target_role TEXT NOT NULL DEFAULT 'Software Engineer',
     difficulty TEXT DEFAULT 'Intermediate' CHECK (difficulty IN ('Entry Level', 'Intermediate', 'Advanced', 'Senior')),
-    transcript JSONB DEFAULT '[]'::jsonb,
-    scores JSONB DEFAULT '{"overall": 85, "communication": 88, "technical": 82, "confidence": 90, "relevance": 84}'::jsonb,
+    questions JSONB DEFAULT '[]'::jsonb,
+    answers JSONB DEFAULT '[]'::jsonb,
+    scores JSONB DEFAULT '{"overall": 0, "technical": 0, "communication": 0, "confidence": 0, "grammar": 0, "completeness": 0, "problem_solving": 0}'::jsonb,
     feedback JSONB DEFAULT '{}'::jsonb,
+    overall_score INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -115,6 +124,70 @@ ALTER TABLE public.interview_sessions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage their interview sessions" 
     ON public.interview_sessions FOR ALL 
+    USING (auth.uid() = user_id);
+
+-------------------------------------------------------
+-- 5B. INTERVIEW ANSWERS TABLE
+-------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.interview_answers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES public.interview_sessions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    question_index INT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT,
+    evaluation JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.interview_answers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their interview answers" 
+    ON public.interview_answers FOR ALL 
+    USING (auth.uid() = user_id);
+
+-------------------------------------------------------
+-- 5C. INTERVIEW SCORES TABLE
+-------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.interview_scores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES public.interview_sessions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    technical INT DEFAULT 0,
+    communication INT DEFAULT 0,
+    confidence INT DEFAULT 0,
+    grammar INT DEFAULT 0,
+    completeness INT DEFAULT 0,
+    problem_solving INT DEFAULT 0,
+    overall INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.interview_scores ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their interview scores" 
+    ON public.interview_scores FOR ALL 
+    USING (auth.uid() = user_id);
+
+-------------------------------------------------------
+-- 5D. CAREER TWIN TABLE
+-------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.career_twin (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE,
+    completion_score INT DEFAULT 0,
+    interview_readiness INT DEFAULT 0,
+    communication_score INT DEFAULT 50,
+    confidence_score INT DEFAULT 50,
+    technical_score INT DEFAULT 50,
+    skill_confidence INT DEFAULT 50,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.career_twin ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their career twin record" 
+    ON public.career_twin FOR ALL 
     USING (auth.uid() = user_id);
 
 -------------------------------------------------------
