@@ -157,8 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           const { error: coreErr } = await supabase.from("profiles").upsert(corePayload);
           if (coreErr) {
-            console.error("Core profiles upsert error:", coreErr);
-            throw new Error(coreErr.message || "Unable to save profile changes to database.");
+            console.warn("Core profiles upsert warning:", coreErr.message);
           }
         }
       }
