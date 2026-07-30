@@ -311,10 +311,11 @@ export const authService = {
           return null;
         }
 
+        const userEmail = session.user.email || "";
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
-          .eq("id", session.user.id)
+          .or(`id.eq.${session.user.id},email.eq.${userEmail}`)
           .maybeSingle();
 
         const activeProfile: UserProfile = profile || {

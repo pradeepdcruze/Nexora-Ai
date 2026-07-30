@@ -10,23 +10,50 @@ export default function AuthCallbackPage() {
   const { refreshUserData } = useAuth();
 
   useEffect(() => {
+    let active = true;
+
     async function handleAuthCallback() {
-      try {
-        if (isSupabaseConfigured && supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            await authService.getCurrentUser();
-            refreshUserData();
+      if (isSupabaseConfigured && supabase) {
+        // Listen for session parsing completion
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user && active) {
+            try {
+              await authService.getCurrentUser();
+              refreshUserData();
+            } catch (err) {
+              console.warn("OAuth callback session error:", err);
+            } finally {
+              subscription.unsubscribe();
+              router.replace("/dashboard");
+            }
           }
-        }
-      } catch (err) {
-        console.error("OAuth callback error:", err);
-      } finally {
+        });
+
+        // Backup fallback resolution after microtask
+        setTimeout(async () => {
+          if (active) {
+            try {
+              const currentUser = await authService.getCurrentUser();
+              if (currentUser) {
+                refreshUserData();
+                router.replace("/dashboard");
+              } else {
+                router.replace("/auth/login");
+              }
+            } catch {
+              router.replace("/auth/login");
+            }
+          }
+        }, 1200);
+      } else {
         router.replace("/dashboard");
       }
     }
 
     handleAuthCallback();
+    return () => {
+      active = false;
+    };
   }, [router, refreshUserData]);
 
   return (
