@@ -17,7 +17,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -39,10 +38,6 @@ export default function SignupPage() {
     }
     if (password.length < 6) {
       setErrorMsg("Password must be at least 6 characters long.");
-      return;
-    }
-    if (!agreeTerms) {
-      setErrorMsg("Please accept the Terms of Service to continue.");
       return;
     }
 
@@ -164,20 +159,6 @@ export default function SignupPage() {
                 </span>
               </div>
             )}
-          </div>
-
-          {/* Terms Checkbox */}
-          <div className="flex items-start gap-2.5 pt-1">
-            <input
-              type="checkbox"
-              id="terms"
-              checked={agreeTerms}
-              onChange={(e) => setAgreeTerms(e.target.checked)}
-              className="mt-0.5 rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="terms" className="text-xs text-slate-400 leading-normal select-none">
-              I agree to the <a href="#" className="text-blue-400 hover:underline">Terms of Service</a> and <a href="#" className="text-blue-400 hover:underline">Privacy Policy</a>.
-            </label>
           </div>
 
           {/* Submit Button */}
