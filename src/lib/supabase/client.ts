@@ -63,47 +63,6 @@ export const authService = {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
-      // 1. First test if user already exists with password
-      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
-
-      if (loginData?.user && !loginError) {
-        // User already exists and password matched -> log in seamlessly!
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", loginData.user.id)
-          .maybeSingle();
-
-        const userProfile: UserProfile = profile || {
-          id: loginData.user.id,
-          full_name: fullName || loginData.user.user_metadata?.full_name || cleanEmail.split("@")[0],
-          email: cleanEmail,
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName || cleanEmail)}`,
-          headline: "Early Career Professional",
-          career_goal: "Update target roles in Settings",
-          target_roles: ["Software Engineer"],
-          location: "Location not specified",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          saveAccountToRegistry({ id: loginData.user.id, email: cleanEmail, password, profile: userProfile });
-        }
-        return loginData;
-      }
-
-      if (loginError && !loginError.message.toLowerCase().includes("invalid login") && !loginError.message.toLowerCase().includes("user not found")) {
-        if (loginError.message.toLowerCase().includes("rate limit")) {
-          throw new Error("An account with this email already exists. Please log in with your password.");
-        }
-      }
-
-      // 2. User does not exist or password didn't match -> attempt signup
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
@@ -113,12 +72,13 @@ export const authService = {
       });
 
       if (error) {
+        console.error("Supabase Auth SignUp Error:", error);
         const msg = error.message.toLowerCase();
         if (msg.includes("already registered") || msg.includes("already in use") || msg.includes("user_already_exists")) {
           throw new Error("An account with this email address already exists. Please log in with your password.");
         }
         if (msg.includes("rate limit")) {
-          throw new Error("An account with this email address already exists. Please log in with your password.");
+          throw new Error("Too many signup requests. Please try logging in or wait a few minutes.");
         }
         throw new Error(error.message);
       }
@@ -137,48 +97,34 @@ export const authService = {
           updated_at: new Date().toISOString(),
         };
 
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: data.user.id,
-          full_name: fullName,
-          email: cleanEmail,
-          avatar_url: userProfile.avatar_url,
-          headline: userProfile.headline,
-          career_goal: userProfile.career_goal,
-          target_roles: userProfile.target_roles,
-          location: userProfile.location,
-          updated_at: new Date().toISOString(),
-        });
-
-        if (profileError) console.warn("Profile table insert warning:", profileError.message);
+        try {
+          await supabase.from("profiles").upsert({
+            id: data.user.id,
+            full_name: fullName,
+            email: cleanEmail,
+            avatar_url: userProfile.avatar_url,
+            headline: userProfile.headline,
+            career_goal: userProfile.career_goal,
+            target_roles: userProfile.target_roles,
+            location: userProfile.location,
+            updated_at: new Date().toISOString(),
+          });
+        } catch (profileError: any) {
+          console.warn("Profile table insert warning:", profileError?.message);
+        }
 
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          saveAccountToRegistry({ id: data.user.id, email: cleanEmail, password, profile: userProfile });
         }
       }
 
       return data;
     } else {
-      const registry = getAccountRegistry();
-      const existingAccount = registry.get(cleanEmail);
-
-      if (existingAccount) {
-        if (existingAccount.password === password) {
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(existingAccount.profile));
-          }
-          return { user: existingAccount.profile, session: { token: `demo_token_${existingAccount.id}` } };
-        } else {
-          throw new Error("An account with this email address already exists. Please log in with your password.");
-        }
-      }
-
       const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
       const emptyStore = createEmptyUserData(userId, cleanEmail, fullName);
       const userProfile = emptyStore.profile;
 
       if (typeof window !== "undefined") {
-        saveAccountToRegistry({ id: userId, email: cleanEmail, password, profile: userProfile });
         localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
       }
       return { user: userProfile, session: { token: `demo_token_${userId}` } };
@@ -195,19 +141,13 @@ export const authService = {
       });
 
       if (error) {
+        console.error("Supabase Auth SignIn Error:", error);
         const msg = error.message.toLowerCase();
-        if (msg.includes("invalid login") || msg.includes("user not found") || msg.includes("invalid_credentials")) {
-          // Check if profile exists
-          const { data: existingProfile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("email", cleanEmail)
-            .maybeSingle();
-
-          if (!existingProfile) {
-            throw new Error("Account not found. Please create an account first.");
-          }
-          throw new Error("Incorrect password. Please try again.");
+        if (msg.includes("invalid login") || msg.includes("user not found") || msg.includes("invalid_credentials") || msg.includes("invalid credentials")) {
+          throw new Error("Incorrect email or password. Please try again.");
+        }
+        if (msg.includes("email not confirmed")) {
+          throw new Error("Email confirmation is required by your authentication provider. Please check your inbox.");
         }
         if (msg.includes("rate limit")) {
           throw new Error("Too many login attempts. Please wait a moment and try again.");
@@ -238,30 +178,19 @@ export const authService = {
 
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          saveAccountToRegistry({ id: data.user.id, email: cleanEmail, password, profile: userProfile });
         }
       }
 
       return data;
     } else {
-      const registry = getAccountRegistry();
-      const existingAccount = registry.get(cleanEmail);
-
-      if (!existingAccount) {
-        throw new Error("Account not found. Please create an account first.");
-      }
-
-      if (existingAccount.password !== password) {
-        throw new Error("Incorrect password. Please try again.");
-      }
-
-      const userStore = getLocalUserData(existingAccount.id, cleanEmail, existingAccount.profile.full_name);
-      const activeProfile = userStore.profile || existingAccount.profile;
+      const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+      const userStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
+      const activeProfile = userStore.profile;
 
       if (typeof window !== "undefined") {
         localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
       }
-      return { user: activeProfile, session: { token: `demo_token_${existingAccount.id}` } };
+      return { user: activeProfile, session: { token: `demo_token_${userId}` } };
     }
   },
 
@@ -278,7 +207,16 @@ export const authService = {
           },
         },
       });
-      if (error) throw new Error(error.message);
+
+      if (error) {
+        console.error("Supabase Google OAuth Error:", error);
+        const msg = error.message.toLowerCase();
+        if (msg.includes("provider is not enabled") || msg.includes("validation_failed") || msg.includes("unsupported provider")) {
+          throw new Error("Google sign-in is not enabled in your Supabase project settings. Please log in with your email and password.");
+        }
+        throw new Error(error.message || "Failed to authenticate with Google.");
+      }
+
       return data;
     } else {
       const userId = `usr_google_${Date.now()}`;
