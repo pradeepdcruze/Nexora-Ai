@@ -107,41 +107,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUserProfile = useCallback(
     async (updates: Partial<UserProfile>) => {
       const activeUser = user || authService.getCachedUser();
-      if (!activeUser || !userDataStore) return;
+      if (!activeUser) return;
 
+      const currentStore = userDataStore || getLocalUserData(activeUser.id, activeUser.email, activeUser.full_name);
       const updatedProfile: UserProfile = {
-        ...userDataStore.profile,
+        ...currentStore.profile,
         ...updates,
         updated_at: new Date().toISOString(),
       };
       const updatedStore: UserDataStore = {
-        ...userDataStore,
+        ...currentStore,
         profile: updatedProfile,
       };
 
-      // 1. Save to Supabase if configured
+      // 1. Save to Supabase DB if configured
       if (isSupabaseConfigured && supabase) {
-        const { error: dbErr } = await supabase.from("profiles").upsert({
+        const payload: Record<string, any> = {
           id: activeUser.id,
           full_name: updatedProfile.full_name,
           email: updatedProfile.email,
           avatar_url: updatedProfile.avatar_url,
           headline: updatedProfile.headline,
-          bio: updatedProfile.bio,
-          phone: updatedProfile.phone,
           career_goal: updatedProfile.career_goal,
           target_roles: updatedProfile.target_roles,
           location: updatedProfile.location,
-          education: updatedProfile.education,
-          social_links: updatedProfile.social_links,
-          theme: updatedProfile.theme,
-          skills: updatedProfile.skills,
           updated_at: updatedProfile.updated_at,
-        });
+        };
+
+        if (updatedProfile.bio !== undefined) payload.bio = updatedProfile.bio;
+        if (updatedProfile.phone !== undefined) payload.phone = updatedProfile.phone;
+        if (updatedProfile.education !== undefined) payload.education = updatedProfile.education;
+        if (updatedProfile.social_links !== undefined) payload.social_links = updatedProfile.social_links;
+        if (updatedProfile.theme !== undefined) payload.theme = updatedProfile.theme;
+
+        const { error: dbErr } = await supabase.from("profiles").upsert(payload);
 
         if (dbErr) {
-          console.error("Failed to sync profile update to Supabase DB:", dbErr);
-          throw new Error(dbErr.message || "Unable to save profile changes to database.");
+          console.warn("Full profiles upsert warning, retrying with core columns:", dbErr.message);
+          const corePayload = {
+            id: activeUser.id,
+            full_name: updatedProfile.full_name,
+            email: updatedProfile.email,
+            avatar_url: updatedProfile.avatar_url,
+            headline: updatedProfile.headline,
+            career_goal: updatedProfile.career_goal,
+            target_roles: updatedProfile.target_roles,
+            location: updatedProfile.location,
+            updated_at: updatedProfile.updated_at,
+          };
+          const { error: coreErr } = await supabase.from("profiles").upsert(corePayload);
+          if (coreErr) {
+            console.error("Core profiles upsert error:", coreErr);
+            throw new Error(coreErr.message || "Unable to save profile changes to database.");
+          }
         }
       }
 
@@ -149,6 +167,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveLocalUserData(activeUser.id, updatedStore);
       if (typeof window !== "undefined") {
         localStorage.setItem("nexora_active_user_session", JSON.stringify(updatedProfile));
+        if (updatedProfile.theme) {
+          localStorage.setItem("nexora-theme", updatedProfile.theme);
+        }
       }
 
       // 3. Update active React state
