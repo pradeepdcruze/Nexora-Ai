@@ -140,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (updatedProfile.social_links !== undefined) payload.social_links = updatedProfile.social_links;
         if (updatedProfile.theme !== undefined) payload.theme = updatedProfile.theme;
 
-        const { error: dbErr } = await supabase.from("profiles").upsert(payload);
+        const { error: dbErr } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
 
         if (dbErr) {
           console.warn("Full profiles upsert warning, retrying with core columns:", dbErr.message);
@@ -155,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             location: updatedProfile.location,
             updated_at: updatedProfile.updated_at,
           };
-          const { error: coreErr } = await supabase.from("profiles").upsert(corePayload);
+          const { error: coreErr } = await supabase.from("profiles").upsert(corePayload, { onConflict: "id" });
           if (coreErr) {
             console.warn("Core profiles upsert warning:", coreErr.message);
           }
