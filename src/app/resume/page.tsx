@@ -97,16 +97,10 @@ export default function ResumePage() {
         confidence_score: parsedData.confidenceScore || 85,
       };
 
-      const currentSkills = userDataStore?.skills || [];
-      const existingSkillNames = new Set(currentSkills.map((s) => s.name.toLowerCase()));
-      const uniqueNewSkills = extractedSkills.filter(
-        (s) => !existingSkillNames.has(s.name.toLowerCase())
-      );
-
       const updatedStore: UserDataStore = {
         ...(userDataStore || createEmptyUserData(activeUser.id, activeUser.email, activeUser.full_name)),
         resumes: [newResume],
-        skills: [...uniqueNewSkills, ...currentSkills],
+        skills: extractedSkills,
       };
 
       saveLocalUserData(activeUser.id, updatedStore);

@@ -228,17 +228,25 @@ export function extractEducationFromText(text: string): ParsedEducationItem[] {
   return educationList;
 }
 
-export function parseResumeFileContent(fileName: string, rawText?: string): ParsedResumeResult {
-  const contentText = (rawText || fileName) + " " + fileName;
-  const lowerText = contentText.toLowerCase();
+function isTermInText(text: string, term: string): boolean {
+  if (!text || !term) return false;
+  // Escape special regex characters in technical terms like C++, C#, .NET, Node.js, Next.js, Express.js
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Strict word-boundary matching accounting for non-alphanumeric separators
+  const regex = new RegExp(`(?:^|[^a-zA-Z0-9_#+.])${escaped}(?:$|[^a-zA-Z0-9_#+.])`, "i");
+  return regex.test(text);
+}
 
-  // Deduplicated skill collection (Case-insensitive key matching)
+export function parseResumeFileContent(fileName: string, rawText?: string): ParsedResumeResult {
+  const contentText = (rawText || "") + " " + fileName;
+
+  // Deduplicated skill collection strictly based on resume text
   const extractedSkillMap = new Map<string, SkillItem>();
 
-  // 1. Taxonomy Matching
+  // Strict taxonomy term matching against explicit resume text
   SKILL_TAXONOMY_BANK.forEach((skillDef) => {
-    const isPrimaryMatch = lowerText.includes(skillDef.name.toLowerCase());
-    const isAliasMatch = skillDef.aliases?.some((alias) => lowerText.includes(alias.toLowerCase()));
+    const isPrimaryMatch = isTermInText(contentText, skillDef.name);
+    const isAliasMatch = skillDef.aliases?.some((alias) => isTermInText(contentText, alias));
 
     if (isPrimaryMatch || isAliasMatch) {
       const key = skillDef.name.toLowerCase();
@@ -252,31 +260,6 @@ export function parseResumeFileContent(fileName: string, rawText?: string): Pars
           source: "resume",
         });
       }
-    }
-  });
-
-  // 2. Dynamic Phrase Extraction for uncatalogued custom skills
-  const regexPatterns = [
-    /\b(Kali Linux|Burp Suite|Wireshark|Metasploit|Nmap|Spring Boot|Microservices|Cyber Security|Ethical Hacking|Penetration Testing|TensorFlow|PyTorch|Scikit-Learn|AWS|Docker|Kubernetes|PostgreSQL|MongoDB|Next\.js|Tailwind CSS|GraphQL|REST API)\b/gi,
-  ];
-
-  regexPatterns.forEach((pattern) => {
-    const matches = contentText.match(pattern);
-    if (matches) {
-      matches.forEach((matchedTerm) => {
-        const cleanTerm = matchedTerm.trim();
-        const key = cleanTerm.toLowerCase();
-        if (!extractedSkillMap.has(key)) {
-          extractedSkillMap.set(key, {
-            id: `sk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            name: cleanTerm,
-            category: "Technical",
-            proficiency: 85,
-            confidence: 90,
-            source: "resume",
-          });
-        }
-      });
     }
   });
 

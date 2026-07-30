@@ -62,7 +62,7 @@ export default function LandingPage() {
   const userReadiness = careerTwinSummary?.interview_readiness || (userDataStore as any)?.career_twin_summary?.interview_readiness || 89;
   const userSkillsList = userDataStore?.skills?.length
     ? userDataStore.skills.slice(0, 4).map((s: any) => (typeof s === "string" ? s : s.name)).join(", ")
-    : "React, Next.js, TypeScript, SQL";
+    : "No skills detected in resume yet";
   const mockCount = (userDataStore as any)?.interview_sessions?.length ?? 4;
 
   return (

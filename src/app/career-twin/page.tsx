@@ -312,9 +312,9 @@ export default function CareerTwinPage() {
             ) : (
               <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
                 <Target className="w-10 h-10 text-blue-400 mx-auto" />
-                <h4 className="text-sm font-bold text-white">No Skills Verified Yet</h4>
+                <h4 className="text-sm font-bold text-white">No skills detected in resume yet</h4>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Upload your resume or add your core skills manually to build your Career Twin.
+                  Upload your resume to extract your skills and build your Career Twin.
                 </p>
                 <div className="pt-2 flex justify-center gap-3">
                   <Link
