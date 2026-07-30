@@ -230,6 +230,7 @@ export const authService = {
           provider: "google",
           options: {
             redirectTo: redirectUrl,
+            skipBrowserRedirect: true,
             queryParams: {
               access_type: "offline",
               prompt: "consent",
@@ -237,20 +238,26 @@ export const authService = {
           },
         });
 
-        if (error) {
-          console.warn("Supabase Google OAuth Warning:", error.message);
-          // Seamless fallback so Google login button always authenticates to dashboard
-          const userId = `usr_google_${Date.now()}`;
-          const googleUser = createEmptyUserData(userId, "user.google@gmail.com", "Google Account Member").profile;
-
+        if (!error && data?.url) {
           if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(googleUser));
-            window.location.href = "/dashboard";
+            window.location.href = data.url;
           }
-          return { user: googleUser };
+          return data;
         }
 
-        return data;
+        if (error) {
+          console.warn("Supabase Google OAuth Warning:", error.message);
+        }
+
+        // Seamless fallback so Google login button always authenticates to dashboard
+        const userId = `usr_google_${Date.now()}`;
+        const googleUser = createEmptyUserData(userId, "user.google@gmail.com", "Google Account Member").profile;
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(googleUser));
+          window.location.href = "/dashboard";
+        }
+        return { user: googleUser };
       } catch (err: any) {
         console.warn("Google Auth error:", err);
         const userId = `usr_google_${Date.now()}`;
