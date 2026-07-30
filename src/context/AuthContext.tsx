@@ -80,10 +80,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
           loadUserData();
         } else if (event === "SIGNED_OUT" || !session) {
-          authService.signOut();
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("nexora_active_user_session");
+          }
           setUser(null);
           setUserDataStore(null);
           setCareerTwinSummary(null);
+          setLoading(false);
         }
       });
       return () => subscription.unsubscribe();
