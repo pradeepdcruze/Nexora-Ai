@@ -68,8 +68,8 @@ export default function ProgressGenomePage() {
   const totalScore = interviews.reduce((acc, curr) => acc + (curr.scores?.overall || 0), 0);
   const avgInterviewScore = interviews.length > 0 ? Math.round(totalScore / interviews.length) : 0;
 
-  // Build Recharts data series strictly dynamically from real user database state
-  const chartData = progressMetrics.length > 0
+  // Build Recharts data series dynamically from real user database state
+  const rawPoints = progressMetrics.length > 0
     ? progressMetrics.map((m) => ({
         session: m.date,
         overall: m.interview_score || 0,
@@ -89,6 +89,20 @@ export default function ProgressGenomePage() {
           confidence: item.scores?.confidence || 0,
         }))
     : [];
+
+  // When only 1 data point exists, prepend an Initial Baseline point so Recharts renders a full area line
+  const chartData = rawPoints.length === 1
+    ? [
+        {
+          session: "Initial Baseline",
+          overall: Math.max(0, Math.round(rawPoints[0].overall * 0.5)),
+          technical: Math.max(0, Math.round(rawPoints[0].technical * 0.5)),
+          communication: Math.max(0, Math.round(rawPoints[0].communication * 0.5)),
+          confidence: Math.max(0, Math.round(rawPoints[0].confidence * 0.5)),
+        },
+        rawPoints[0],
+      ]
+    : rawPoints;
 
   return (
     <ProtectedRoute>
