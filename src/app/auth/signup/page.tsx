@@ -23,15 +23,23 @@ export default function SignupPage() {
   const passwordLengthValid = password.length >= 6;
   const passwordHasNumber = /\d/.test(password);
 
+  const isSubmittingRef = React.useRef(false);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || loading) return;
+
     setErrorMsg("");
 
-    if (!fullName.trim()) {
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
       setErrorMsg("Please enter your full name.");
       return;
     }
-    if (!email.trim() || !email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
       setErrorMsg("Please enter a valid email address.");
       return;
     }
@@ -41,14 +49,17 @@ export default function SignupPage() {
     }
 
     try {
+      isSubmittingRef.current = true;
       setLoading(true);
-      await authService.signUp(email, password, fullName);
+      await authService.signUp(trimmedEmail, password, trimmedName);
       await refreshUserData();
       router.push("/dashboard");
     } catch (err: any) {
+      console.warn("Signup Error:", err);
       setErrorMsg(err.message || "Failed to create account. Please try again.");
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 

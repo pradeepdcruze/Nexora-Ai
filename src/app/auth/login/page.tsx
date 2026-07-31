@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const isSubmittingRef = React.useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -32,6 +32,8 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || loading) return;
+
     setErrorMsg("");
 
     const trimmedEmail = email.trim();
@@ -49,6 +51,7 @@ export default function LoginPage() {
     }
 
     try {
+      isSubmittingRef.current = true;
       setLoading(true);
       await authService.signIn(trimmedEmail, password);
       await refreshUserData();
@@ -58,17 +61,7 @@ export default function LoginPage() {
       setErrorMsg(err.message || "Incorrect email or password.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    try {
-      setLoading(true);
-      await authService.signInWithGoogle();
-      refreshUserData();
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to authenticate with Google.");
-      setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 

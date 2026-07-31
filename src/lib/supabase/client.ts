@@ -22,6 +22,49 @@ function sanitizeLocation(loc?: string): string {
   return loc;
 }
 
+function mapAuthError(error: any): string {
+  if (!error) return "An unexpected error occurred. Please try again.";
+  const message = (error.message || "").toLowerCase();
+  
+  if (
+    message.includes("rate limit") ||
+    message.includes("rate_limit") ||
+    message.includes("too many requests") ||
+    error.status === 429
+  ) {
+    return "Email service is temporarily busy. Please try again shortly.";
+  }
+
+  if (
+    message.includes("already registered") ||
+    message.includes("already exists") ||
+    message.includes("user_already_exists")
+  ) {
+    return "Account already exists. Please log in.";
+  }
+
+  if (
+    message.includes("invalid login credentials") ||
+    message.includes("invalid credentials") ||
+    message.includes("wrong password")
+  ) {
+    return "Incorrect email or password.";
+  }
+
+  if (
+    message.includes("password should be at least") ||
+    message.includes("weak password")
+  ) {
+    return "Password does not meet the required security rules.";
+  }
+
+  if (message.includes("invalid email") || message.includes("unable to validate email")) {
+    return "Please enter a valid email address.";
+  }
+
+  return error.message || "Unable to connect to the server. Please try again.";
+}
+
 // Auth helper service wrapper strictly bound to active user sessions
 export const authService = {
   getCachedUser(): UserProfile | null {
@@ -45,7 +88,6 @@ export const authService = {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
-      // 1. Try Supabase Auth sign up
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
@@ -53,6 +95,11 @@ export const authService = {
           data: { full_name: fullName },
         },
       });
+
+      if (error) {
+        console.warn("Supabase Auth signUp error:", error);
+        throw new Error(mapAuthError(error));
+      }
 
       if (data?.user) {
         // Check if profile already exists for this auth user ID
@@ -101,62 +148,9 @@ export const authService = {
         }
         return data;
       }
-
-      // 2. If signUp returned error (e.g. rate limit, email rate limit exceeded, or user already registered):
-      if (error) {
-        console.warn("Supabase SignUp warning, attempting login fallback:", error.message);
-        
-        // Attempt login with password
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-
-        if (loginData?.user && !loginErr) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", loginData.user.id)
-            .maybeSingle();
-
-          const userProfile: UserProfile = profile ? {
-            ...profile,
-            location: sanitizeLocation(profile.location),
-          } : {
-            id: loginData.user.id,
-            full_name: fullName || cleanEmail.split("@")[0],
-            email: cleanEmail,
-            avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`,
-            headline: "Early Career Professional",
-            career_goal: "Update target roles in Settings",
-            target_roles: ["Software Engineer"],
-            location: "",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          }
-          return loginData;
-        }
-
-        // 3. If password login also fails due to rate limit or email confirmation issue,
-        // create a fallback seamless user session so rate limits NEVER block the user
-        const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
-        const userStore = getLocalUserData(userId, cleanEmail, fullName);
-        const fallbackProfile = userStore.profile;
-        fallbackProfile.full_name = fullName || fallbackProfile.full_name;
-        fallbackProfile.location = sanitizeLocation(fallbackProfile.location);
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(fallbackProfile));
-        }
-        return { user: fallbackProfile, session: { token: `demo_token_${userId}` } };
-      }
     }
 
-    // Fallback demo mode when Supabase is not configured
+    // Fallback demo mode when Supabase env vars are not set
     const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
     const userStore = getLocalUserData(userId, cleanEmail, fullName);
     const userProfile = userStore.profile;
@@ -178,7 +172,8 @@ export const authService = {
       });
 
       if (error || !data?.user) {
-        throw new Error(error?.message || "Incorrect email or password.");
+        console.warn("Supabase Auth signIn error:", error);
+        throw new Error(mapAuthError(error));
       }
 
       const { data: profile } = await supabase
@@ -232,7 +227,7 @@ export const authService = {
       return data;
     }
 
-    // Demo / offline fallback when Supabase is not configured
+    // Fallback demo mode when Supabase env vars are not set
     const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
     const userStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
     const activeProfile = userStore.profile;
@@ -242,42 +237,6 @@ export const authService = {
       localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
     }
     return { user: activeProfile, session: { token: `demo_token_${userId}` } };
-  },
-
-  async signInWithGoogle() {
-    if (isSupabaseConfigured && supabase) {
-      const redirectUrl = `${window.location.origin}/auth/callback`;
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-
-      if (!error && data?.url) {
-        if (typeof window !== "undefined") {
-          window.location.href = data.url;
-        }
-        return data;
-      }
-      if (error) {
-        throw new Error(error.message || "Failed to authenticate with Google.");
-      }
-    }
-
-    const userId = `usr_google_${Date.now()}`;
-    const googleUser = createEmptyUserData(userId, "user.google@gmail.com", "Google Account Member").profile;
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("nexora_active_user_session", JSON.stringify(googleUser));
-      window.location.href = "/dashboard";
-    }
-    return { user: googleUser };
   },
 
   async signOut() {
