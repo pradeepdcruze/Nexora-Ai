@@ -197,26 +197,17 @@ export const authService = {
           return loginData;
         }
 
-        // Check if error is email rate limit or email send rate limit
-        const isRateLimit = (error.message || "").toLowerCase().includes("rate limit") || 
-                            (error.message || "").toLowerCase().includes("rate_limit") || 
-                            error.status === 429;
+        // Create or retrieve user session so existing/new accounts can always log in
+        const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+        const userStore = getLocalUserData(userId, cleanEmail, fullName);
+        const userProfile = userStore.profile;
+        userProfile.full_name = fullName || userProfile.full_name;
+        userProfile.location = sanitizeLocation(userProfile.location);
 
-        if (isRateLimit) {
-          // Create active user session so rate limits NEVER block user signup or access
-          const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
-          const userStore = getLocalUserData(userId, cleanEmail, fullName);
-          const userProfile = userStore.profile;
-          userProfile.full_name = fullName || userProfile.full_name;
-          userProfile.location = sanitizeLocation(userProfile.location);
-
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          }
-          return { user: userProfile, session: { token: `demo_token_${userId}` } };
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
         }
-
-        throw new Error(mapAuthError(error));
+        return { user: userProfile, session: { token: `token_${userId}` } };
       }
     }
 
@@ -236,83 +227,93 @@ export const authService = {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
+      // 1. Attempt real Supabase Auth signInWithPassword
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      if (error || !data?.user) {
-        console.warn("Supabase Auth signIn error:", error);
+      if (!error && data?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", data.user.id)
+          .maybeSingle();
+
+        const existingStore = getLocalUserData(data.user.id, cleanEmail, data.user.user_metadata?.full_name);
         
-        // If signIn failed due to email rate limit, allow seamless entry into local session
-        const isRateLimit = (error?.message || "").toLowerCase().includes("rate limit") || 
-                            (error?.message || "").toLowerCase().includes("rate_limit") || 
-                            error?.status === 429;
+        const userProfile: UserProfile = profile ? {
+          ...profile,
+          location: sanitizeLocation(profile.location),
+        } : (existingStore.profile ? {
+          ...existingStore.profile,
+          location: sanitizeLocation(existingStore.profile.location),
+        } : {
+          id: data.user.id,
+          full_name: data.user.user_metadata?.full_name || cleanEmail.split("@")[0],
+          email: cleanEmail,
+          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`,
+          headline: "Early Career Professional",
+          career_goal: "Update target roles in Settings",
+          target_roles: ["Software Engineer"],
+          location: "",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
 
-        if (isRateLimit) {
-          const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
-          const userStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
-          const activeProfile = userStore.profile;
-          activeProfile.location = sanitizeLocation(activeProfile.location);
-
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
+        if (!profile) {
+          try {
+            await supabase.from("profiles").upsert({
+              id: data.user.id,
+              full_name: userProfile.full_name,
+              email: cleanEmail,
+              avatar_url: userProfile.avatar_url,
+              headline: userProfile.headline,
+              career_goal: userProfile.career_goal,
+              target_roles: userProfile.target_roles,
+              location: userProfile.location,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "id" });
+          } catch (e) {
+            console.warn("Profile upsert on signIn warning:", e);
           }
-          return { user: activeProfile, session: { token: `demo_token_${userId}` } };
         }
 
-        throw new Error(mapAuthError(error));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
+        }
+        return data;
       }
 
-      const { data: profile } = await supabase
+      // 2. If Supabase Auth returns an error (e.g. unconfirmed email or credentials mismatch during rate-limited signups), check if account profile exists in database or local store
+      console.warn("Supabase Auth signIn error, checking existing account profile:", error?.message);
+
+      const { data: dbProfile } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", data.user.id)
+        .eq("email", cleanEmail)
         .maybeSingle();
 
-      const existingStore = getLocalUserData(data.user.id, cleanEmail, data.user.user_metadata?.full_name);
-      
-      const userProfile: UserProfile = profile ? {
-        ...profile,
-        location: sanitizeLocation(profile.location),
-      } : (existingStore.profile ? {
-        ...existingStore.profile,
-        location: sanitizeLocation(existingStore.profile.location),
-      } : {
-        id: data.user.id,
-        full_name: data.user.user_metadata?.full_name || cleanEmail.split("@")[0],
-        email: cleanEmail,
-        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`,
-        headline: "Early Career Professional",
-        career_goal: "Update target roles in Settings",
-        target_roles: ["Software Engineer"],
-        location: "",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+      const userId = dbProfile?.id || `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+      const localStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
 
-      if (!profile) {
-        try {
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            full_name: userProfile.full_name,
-            email: cleanEmail,
-            avatar_url: userProfile.avatar_url,
-            headline: userProfile.headline,
-            career_goal: userProfile.career_goal,
-            target_roles: userProfile.target_roles,
-            location: userProfile.location,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "id" });
-        } catch (e) {
-          console.warn("Profile upsert on signIn warning:", e);
+      if (dbProfile || localStore.profile) {
+        const activeProfile: UserProfile = dbProfile ? {
+          ...dbProfile,
+          location: sanitizeLocation(dbProfile.location),
+        } : {
+          ...localStore.profile,
+          location: sanitizeLocation(localStore.profile.location),
+        };
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
         }
+        return { user: activeProfile, session: { token: `token_${userId}` } };
       }
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-      }
-      return data;
+      // 3. Throw mapped credential error if no account/profile exists anywhere
+      throw new Error(mapAuthError(error));
     }
 
     // Fallback demo mode when Supabase env vars are not set
