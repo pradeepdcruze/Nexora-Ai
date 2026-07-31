@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
-import { authService } from "@/lib/supabase/client";
+import { authService, mapAuthError } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 
@@ -56,7 +56,7 @@ export default function SignupPage() {
       router.push("/dashboard");
     } catch (err: any) {
       console.warn("Signup Error:", err);
-      setErrorMsg(err.message || "Failed to create account. Please try again.");
+      setErrorMsg(mapAuthError(err));
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;

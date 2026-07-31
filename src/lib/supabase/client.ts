@@ -22,10 +22,11 @@ function sanitizeLocation(loc?: string): string {
   return loc;
 }
 
-function mapAuthError(error: any): string {
-  if (!error) return "An unexpected error occurred. Please try again.";
-  const message = (error.message || "").toLowerCase();
-  
+export function mapAuthError(error: any): string {
+  if (!error) return "Unable to connect to the server. Please try again.";
+  const raw = typeof error === "string" ? error : error.message || error.error_description || "";
+  const message = raw.toLowerCase();
+
   if (
     message.includes("rate limit") ||
     message.includes("rate_limit") ||
@@ -46,7 +47,11 @@ function mapAuthError(error: any): string {
   if (
     message.includes("invalid login credentials") ||
     message.includes("invalid credentials") ||
-    message.includes("wrong password")
+    message.includes("invalid_grant") ||
+    message.includes("invalid_credentials") ||
+    message.includes("wrong password") ||
+    message.includes("user not found") ||
+    message.includes("email not confirmed")
   ) {
     return "Incorrect email or password.";
   }
@@ -62,7 +67,7 @@ function mapAuthError(error: any): string {
     return "Please enter a valid email address.";
   }
 
-  return error.message || "Unable to connect to the server. Please try again.";
+  return "Unable to connect to the server. Please try again.";
 }
 
 // Auth helper service wrapper strictly bound to active user sessions

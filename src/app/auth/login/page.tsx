@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
-import { authService } from "@/lib/supabase/client";
+import { authService, mapAuthError } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -58,7 +58,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err: any) {
       console.warn("Auth sign in message:", err);
-      setErrorMsg(err.message || "Incorrect email or password.");
+      setErrorMsg(mapAuthError(err));
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
