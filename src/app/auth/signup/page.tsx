@@ -43,7 +43,7 @@ export default function SignupPage() {
     try {
       setLoading(true);
       await authService.signUp(email, password, fullName);
-      refreshUserData();
+      await refreshUserData();
       router.push("/dashboard");
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to create account. Please try again.");
