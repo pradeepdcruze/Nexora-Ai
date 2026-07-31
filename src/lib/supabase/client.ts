@@ -28,6 +28,7 @@ export function mapAuthError(error: any): string {
   const message = raw.toLowerCase();
 
   if (
+    message.includes("busy") ||
     message.includes("rate limit") ||
     message.includes("rate_limit") ||
     message.includes("too many requests") ||
@@ -37,6 +38,7 @@ export function mapAuthError(error: any): string {
   }
 
   if (
+    message.includes("account already exists") ||
     message.includes("already registered") ||
     message.includes("already exists") ||
     message.includes("user_already_exists")
@@ -45,6 +47,7 @@ export function mapAuthError(error: any): string {
   }
 
   if (
+    message.includes("incorrect email") ||
     message.includes("invalid login credentials") ||
     message.includes("invalid credentials") ||
     message.includes("invalid_grant") ||
@@ -57,13 +60,18 @@ export function mapAuthError(error: any): string {
   }
 
   if (
+    message.includes("security rules") ||
     message.includes("password should be at least") ||
     message.includes("weak password")
   ) {
     return "Password does not meet the required security rules.";
   }
 
-  if (message.includes("invalid email") || message.includes("unable to validate email")) {
+  if (
+    message.includes("valid email") ||
+    message.includes("invalid email") ||
+    message.includes("unable to validate email")
+  ) {
     return "Please enter a valid email address.";
   }
 
