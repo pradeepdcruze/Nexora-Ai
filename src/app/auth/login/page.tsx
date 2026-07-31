@@ -24,6 +24,12 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
+  // Guarantee login page fields always open empty
+  React.useEffect(() => {
+    setEmail("");
+    setPassword("");
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -45,7 +51,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       await authService.signIn(trimmedEmail, password);
-      refreshUserData();
+      await refreshUserData();
       router.push("/dashboard");
     } catch (err: any) {
       console.warn("Auth sign in message:", err);
@@ -153,20 +159,6 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </div>
-
-          {/* Remember Me */}
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="remember"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="remember" className="text-xs text-slate-400 select-none">
-              Remember this device
-            </label>
           </div>
 
           {/* Submit Button */}

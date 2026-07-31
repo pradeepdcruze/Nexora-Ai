@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
@@ -50,20 +50,34 @@ const CustomGlassTooltip = ({ active, payload, label }: any) => {
 
 export default function ProgressGenomePage() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { userDataStore, careerTwinSummary } = useAuth();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const twinScore = careerTwinSummary?.completion_score || 0;
   const readinessScore = careerTwinSummary?.interview_readiness || 0;
 
   const interviews = userDataStore?.interviews || [];
+  const progressMetrics = userDataStore?.progressMetrics || [];
   const skillsCount = userDataStore?.skills.length || 0;
 
   // Calculate Average Score across all interviews
   const totalScore = interviews.reduce((acc, curr) => acc + (curr.scores?.overall || 0), 0);
   const avgInterviewScore = interviews.length > 0 ? Math.round(totalScore / interviews.length) : 0;
 
-  // Build Recharts data series dynamically from database state
-  const chartData = interviews.length > 0
+  // Build Recharts data series strictly dynamically from real user database state
+  const chartData = progressMetrics.length > 0
+    ? progressMetrics.map((m) => ({
+        session: m.date,
+        overall: m.interview_score || 0,
+        technical: m.technical_trend || 0,
+        communication: m.communication_trend || 0,
+        confidence: m.confidence_trend || 0,
+      }))
+    : interviews.length > 0
     ? interviews
         .slice()
         .reverse()
@@ -74,11 +88,7 @@ export default function ProgressGenomePage() {
           communication: item.scores?.communication || 0,
           confidence: item.scores?.confidence || 0,
         }))
-    : [
-        { session: "Initial Baseline", overall: 45, technical: 40, communication: 50, confidence: 45 },
-        { session: "Resume Synced", overall: 65, technical: 60, communication: 70, confidence: 65 },
-        { session: "Current Trajectory", overall: readinessScore || 78, technical: Math.min(100, (skillsCount * 8) + 50), communication: 82, confidence: 80 },
-      ];
+    : [];
 
   return (
     <ProtectedRoute>
@@ -143,7 +153,7 @@ export default function ProgressGenomePage() {
             </div>
           </div>
 
-          {/* Modernized Progress Genome Area Chart */}
+          {/* Progress Genome Area Chart */}
           <div className="bg-slate-900/90 rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-6 backdrop-blur-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
               <div>
@@ -163,64 +173,85 @@ export default function ProgressGenomePage() {
               </Link>
             </div>
 
-            <div className="h-88 w-full pt-4">
-              <ResponsiveContainer width="100%" height={340}>
-                <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="overallGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="techGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#A855F7" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#A855F7" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="commGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                  <XAxis dataKey="session" stroke="#64748B" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748B" fontSize={11} domain={[0, 100]} tickLine={false} axisLine={false} />
-                  <Tooltip content={<CustomGlassTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px", color: "#94A3B8", paddingTop: "12px" }} />
-                  <Area
-                    type="monotone"
-                    dataKey="overall"
-                    name="Overall Readiness"
-                    stroke="#3B82F6"
-                    strokeWidth={3}
-                    fill="url(#overallGrad)"
-                    dot={{ r: 4, fill: "#3B82F6", strokeWidth: 2, stroke: "#0F172A" }}
-                    activeDot={{ r: 6, fill: "#FFFFFF", stroke: "#3B82F6", strokeWidth: 2 }}
-                    isAnimationActive={true}
-                    animationDuration={1200}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="technical"
-                    name="Technical Growth"
-                    stroke="#A855F7"
-                    strokeWidth={2.5}
-                    fill="url(#techGrad)"
-                    dot={{ r: 3, fill: "#A855F7" }}
-                    isAnimationActive={true}
-                    animationDuration={1200}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="communication"
-                    name="Communication Structure"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    fill="url(#commGrad)"
-                    dot={{ r: 3, fill: "#10B981" }}
-                    isAnimationActive={true}
-                    animationDuration={1200}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="min-h-[300px] w-full pt-4 flex flex-col justify-center">
+              {!mounted ? (
+                <div className="h-72 w-full animate-pulse bg-slate-950/40 rounded-2xl" />
+              ) : chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={340}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="overallGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="techGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#A855F7" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#A855F7" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="commGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                    <XAxis dataKey="session" stroke="#64748B" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748B" fontSize={11} domain={[0, 100]} tickLine={false} axisLine={false} />
+                    <Tooltip content={<CustomGlassTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: "12px", color: "#94A3B8", paddingTop: "12px" }} />
+                    <Area
+                      type="monotone"
+                      dataKey="overall"
+                      name="Overall Readiness"
+                      stroke="#3B82F6"
+                      strokeWidth={3}
+                      fill="url(#overallGrad)"
+                      dot={{ r: 4, fill: "#3B82F6", strokeWidth: 2, stroke: "#0F172A" }}
+                      activeDot={{ r: 6, fill: "#FFFFFF", stroke: "#3B82F6", strokeWidth: 2 }}
+                      isAnimationActive={true}
+                      animationDuration={1200}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="technical"
+                      name="Technical Growth"
+                      stroke="#A855F7"
+                      strokeWidth={2.5}
+                      fill="url(#techGrad)"
+                      dot={{ r: 3, fill: "#A855F7" }}
+                      isAnimationActive={true}
+                      animationDuration={1200}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="communication"
+                      name="Communication Structure"
+                      stroke="#10B981"
+                      strokeWidth={2.5}
+                      fill="url(#commGrad)"
+                      dot={{ r: 3, fill: "#10B981" }}
+                      isAnimationActive={true}
+                      animationDuration={1200}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-72 w-full flex flex-col items-center justify-center text-center p-6 bg-slate-950/50 rounded-2xl border border-slate-800/60 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <BarChart2 className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">No progress data available yet</h4>
+                  <p className="text-xs text-slate-400 max-w-sm">
+                    Complete your first AI mock interview session or upload a resume to start tracking your skill trajectory.
+                  </p>
+                  <Link
+                    href="/interviews"
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all shadow-md inline-flex items-center gap-2 mt-1"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Start Practice Session</span>
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 

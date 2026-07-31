@@ -47,7 +47,8 @@ export default function SettingsPage() {
       setBio(user.bio || "");
       setPhone(user.phone || "");
       setCareerGoal(user.career_goal || "");
-      setLocation(user.location || "");
+      const loc = user.location || "";
+      setLocation(loc === "Location not specified" || loc === "Default" ? "" : loc);
       setEducation(user.education || "");
       setGithubUrl(user.social_links?.github || "");
       setLinkedinUrl(user.social_links?.linkedin || "");
@@ -423,7 +424,7 @@ export default function SettingsPage() {
                       type="text"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
-                      placeholder="e.g. San Francisco, CA (Open to Remote)"
+                      placeholder="Enter your location"
                       className="w-full p-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 font-semibold text-white focus:outline-none focus:border-blue-500 font-sans"
                     />
                   </div>

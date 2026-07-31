@@ -65,7 +65,7 @@ export function createEmptyUserData(userId: string, email: string, fullName: str
       headline: "Early Career Professional",
       career_goal: "Update target role and career goals in Settings",
       target_roles: ["Software Engineer"],
-      location: "Location not specified",
+      location: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },

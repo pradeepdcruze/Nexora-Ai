@@ -16,7 +16,7 @@ interface AuthContextType {
   userDataStore: UserDataStore | null;
   careerTwinSummary: CareerTwinSummary | null;
   loading: boolean;
-  refreshUserData: () => void;
+  refreshUserData: () => Promise<void>;
   updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -26,7 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   userDataStore: null,
   careerTwinSummary: null,
   loading: true,
-  refreshUserData: () => {},
+  refreshUserData: async () => {},
   updateUserProfile: async () => {},
   logout: async () => {},
 });
@@ -93,16 +93,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [loadUserData]);
 
-  const refreshUserData = useCallback(() => {
-    const activeUser = user || authService.getCachedUser();
-    if (activeUser) {
-      const store = getLocalUserData(activeUser.id, activeUser.email, activeUser.full_name);
-      setUserDataStore(store);
-      const summary = calculateCareerTwinSummary(store);
-      setCareerTwinSummary(summary);
-      if (!user) setUser(activeUser);
+  const refreshUserData = useCallback(async () => {
+    try {
+      const currentUser = await authService.getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+        const store = getLocalUserData(currentUser.id, currentUser.email, currentUser.full_name);
+        store.profile = {
+          ...store.profile,
+          ...currentUser,
+        };
+        setUserDataStore(store);
+        const summary = calculateCareerTwinSummary(store);
+        setCareerTwinSummary(summary);
+      }
+    } catch (err) {
+      console.error("Error refreshing user data:", err);
     }
-  }, [user]);
+  }, []);
 
   const updateUserProfile = useCallback(
     async (updates: Partial<UserProfile>) => {
