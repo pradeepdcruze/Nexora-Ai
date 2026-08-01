@@ -28,16 +28,6 @@ export function mapAuthError(error: any): string {
   const message = raw.toLowerCase();
 
   if (
-    message.includes("busy") ||
-    message.includes("rate limit") ||
-    message.includes("rate_limit") ||
-    message.includes("too many requests") ||
-    error.status === 429
-  ) {
-    return "Email service is temporarily busy. Please try again shortly.";
-  }
-
-  if (
     message.includes("account already exists") ||
     message.includes("already registered") ||
     message.includes("already exists") ||
@@ -71,6 +61,16 @@ export function mapAuthError(error: any): string {
     message.includes("wrong password")
   ) {
     return "Incorrect email or password.";
+  }
+
+  if (
+    message.includes("rate limit") ||
+    message.includes("rate_limit") ||
+    message.includes("too many requests") ||
+    message.includes("busy") ||
+    error.status === 429
+  ) {
+    return "Verification email could not be sent right now. Please try again later.";
   }
 
   if (
@@ -144,7 +144,7 @@ export const authService = {
           throw new Error("Account already exists. Please log in.");
         }
         if (raw.includes("rate limit") || raw.includes("too many requests") || error.status === 429) {
-          throw new Error("Email service is temporarily busy. Please try again shortly.");
+          throw new Error("Verification email could not be sent right now. Please try again later.");
         }
         throw new Error(mapAuthError(error));
       }
@@ -222,7 +222,7 @@ export const authService = {
         .eq("email", cleanEmail)
         .maybeSingle();
 
-      // Attempt Supabase Auth signInWithPassword
+      // Attempt Supabase Auth signInWithPassword strictly
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -319,6 +319,10 @@ export const authService = {
         email: cleanEmail,
       });
       if (error) {
+        const raw = error.message ? error.message.toLowerCase() : "";
+        if (raw.includes("rate limit") || raw.includes("too many requests") || error.status === 429) {
+          throw new Error("Verification email could not be sent right now. Please try again later.");
+        }
         throw new Error(mapAuthError(error));
       }
       return { success: true };
