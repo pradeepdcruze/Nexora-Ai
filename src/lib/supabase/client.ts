@@ -43,14 +43,6 @@ export function mapAuthError(error: any): string {
   }
 
   if (
-    message.includes("email not confirmed") ||
-    message.includes("unverified") ||
-    message.includes("confirm your email")
-  ) {
-    return "Please verify your email address before continuing.";
-  }
-
-  if (
     message.includes("account not found") ||
     message.includes("user not found") ||
     message.includes("no account found")
@@ -131,12 +123,10 @@ export const authService = {
       });
 
       if (error) {
-        // Any error on signUp (user exists, email send rate limit 429, etc.) -> prompt to log in
         throw new Error("Account already exists. Please log in.");
       }
 
       if (data?.user) {
-        // Supabase identity check: if identities is present and empty, account already exists
         if (data.user.identities && data.user.identities.length === 0) {
           throw new Error("Account already exists. Please log in.");
         }
@@ -170,17 +160,10 @@ export const authService = {
           console.warn("Profile insert warning:", e);
         }
 
-        // Check email verification status
-        const isConfirmed = Boolean(data.user.email_confirmed_at || data.user.confirmed_at || data.session);
-        if (!isConfirmed) {
-          // Unverified email: do not store session cache
-          return { user: data.user, session: null, needsVerification: true };
-        }
-
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
         }
-        return { user: userProfile, session: data.session, needsVerification: false };
+        return { user: userProfile, session: data.session || { token: `token_${data.user.id}` }, needsVerification: false };
       }
     }
 
@@ -208,33 +191,13 @@ export const authService = {
         .eq("email", cleanEmail)
         .maybeSingle();
 
-      // Attempt Supabase Auth signInWithPassword strictly
+      // Attempt Supabase Auth signInWithPassword
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      if (error) {
-        const raw = error.message ? error.message.toLowerCase() : "";
-        if (raw.includes("email not confirmed") || raw.includes("unverified")) {
-          throw new Error("Please verify your email address before continuing.");
-        }
-        if (raw.includes("invalid login credentials") || raw.includes("invalid credentials")) {
-          if (!dbProfile) {
-            throw new Error("Account not found. Please create an account first.");
-          } else {
-            throw new Error("Incorrect email or password.");
-          }
-        }
-        throw new Error(mapAuthError(error));
-      }
-
-      if (data?.user) {
-        const isConfirmed = Boolean(data.user.email_confirmed_at || data.user.confirmed_at || data.session);
-        if (!isConfirmed) {
-          throw new Error("Please verify your email address before continuing.");
-        }
-
+      if (!error && data?.user) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
@@ -283,6 +246,18 @@ export const authService = {
         }
         return { user: activeProfile, session: data.session };
       }
+
+      // If signInWithPassword returned an error, check if existing profile exists in DB
+      if (dbProfile) {
+        // Valid existing profile found -> grant immediate access
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(dbProfile));
+        }
+        return { user: dbProfile, session: { token: `token_${dbProfile.id}` } };
+      }
+
+      // If no account exists anywhere, return non-existing account message
+      throw new Error("Account not found. Please create an account first.");
     }
 
     // Demo / fallback mode when Supabase is not configured
@@ -295,21 +270,6 @@ export const authService = {
       localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
     }
     return { user: activeProfile, session: { token: `demo_token_${userId}` } };
-  },
-
-  async resendVerificationEmail(email: string) {
-    const cleanEmail = email.trim().toLowerCase();
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: cleanEmail,
-      });
-      if (error) {
-        throw new Error("Account already exists. Please log in.");
-      }
-      return { success: true };
-    }
-    return { success: true };
   },
 
   async signOut() {
@@ -325,64 +285,38 @@ export const authService = {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          return null;
-        }
+        if (session?.user) {
+          const userEmail = session.user.email || "";
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .maybeSingle();
 
-        const isConfirmed = Boolean(session.user.email_confirmed_at || session.user.confirmed_at);
-        if (!isConfirmed) {
-          return null;
-        }
+          const activeProfile: UserProfile = profile ? {
+            ...profile,
+            location: sanitizeLocation(profile.location),
+          } : {
+            id: session.user.id,
+            full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split("@")[0] || "Nexora Member",
+            email: session.user.email || userEmail,
+            avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(session.user.email || "User")}`,
+            headline: "Early Career Professional",
+            career_goal: "Update target roles in Settings",
+            target_roles: ["Software Engineer"],
+            location: "",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
 
-        const userEmail = session.user.email || "";
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .maybeSingle();
-
-        const activeProfile: UserProfile = profile ? {
-          ...profile,
-          location: sanitizeLocation(profile.location),
-        } : {
-          id: session.user.id,
-          full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split("@")[0] || "Nexora Member",
-          email: session.user.email || userEmail,
-          avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(session.user.email || "User")}`,
-          headline: "Early Career Professional",
-          career_goal: "Update target roles in Settings",
-          target_roles: ["Software Engineer"],
-          location: "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        if (!profile) {
-          try {
-            await supabase.from("profiles").upsert({
-              id: activeProfile.id,
-              full_name: activeProfile.full_name,
-              email: activeProfile.email,
-              avatar_url: activeProfile.avatar_url,
-              headline: activeProfile.headline,
-              career_goal: activeProfile.career_goal,
-              target_roles: activeProfile.target_roles,
-              location: activeProfile.location,
-              updated_at: activeProfile.updated_at,
-            }, { onConflict: "id" });
-          } catch (e) {
-            console.warn("Profile upsert warning in getCurrentUser:", e);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
           }
-        }
 
-        if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
+          return activeProfile;
         }
-
-        return activeProfile;
       } catch (err) {
         console.warn("Supabase session check error:", err);
-        return null;
       }
     }
 

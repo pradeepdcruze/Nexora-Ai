@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { authService, mapAuthError } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -19,7 +19,6 @@ export default function SignupPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [verificationNotice, setVerificationNotice] = useState("");
 
   const passwordLengthValid = password.length >= 6;
   const passwordHasNumber = /\d/.test(password);
@@ -38,7 +37,6 @@ export default function SignupPage() {
     if (isSubmittingRef.current || loading) return;
 
     setErrorMsg("");
-    setVerificationNotice("");
 
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim();
@@ -60,14 +58,9 @@ export default function SignupPage() {
     try {
       isSubmittingRef.current = true;
       setLoading(true);
-      const res = await authService.signUp(trimmedEmail, password, trimmedName);
-      if (res && (res as any).needsVerification) {
-        setVerificationNotice("Please verify your email address before entering Nexora AI.");
-        setPassword("");
-      } else {
-        await refreshUserData();
-        router.push("/dashboard");
-      }
+      await authService.signUp(trimmedEmail, password, trimmedName);
+      await refreshUserData();
+      router.push("/dashboard");
     } catch (err: any) {
       console.warn("Signup error:", err);
       const msg = typeof err === "string" ? err : err?.message || mapAuthError(err);
@@ -92,19 +85,6 @@ export default function SignupPage() {
             Join Nexora AI to unlock skill intelligence and mock interview readiness.
           </p>
         </div>
-
-        {/* Verification Notice */}
-        {verificationNotice && (
-          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-start gap-2.5">
-            <Info className="w-4 h-4 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-semibold text-white">{verificationNotice}</p>
-              <p className="text-[11px] text-blue-300/80">
-                Check your inbox for a confirmation link from Supabase Auth. Once verified, click below to log in.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Error Alert */}
         {errorMsg && (
