@@ -31,7 +31,13 @@ export function mapAuthError(error: any): string {
     message.includes("account already exists") ||
     message.includes("already registered") ||
     message.includes("already exists") ||
-    message.includes("user_already_exists")
+    message.includes("user_already_exists") ||
+    message.includes("rate limit") ||
+    message.includes("rate_limit") ||
+    message.includes("too many requests") ||
+    message.includes("over_email_send_rate_limit") ||
+    message.includes("busy") ||
+    error.status === 429
   ) {
     return "Account already exists. Please log in.";
   }
@@ -61,16 +67,6 @@ export function mapAuthError(error: any): string {
     message.includes("wrong password")
   ) {
     return "Incorrect email or password.";
-  }
-
-  if (
-    message.includes("rate limit") ||
-    message.includes("rate_limit") ||
-    message.includes("too many requests") ||
-    message.includes("busy") ||
-    error.status === 429
-  ) {
-    return "Verification email could not be sent right now. Please try again later.";
   }
 
   if (
@@ -135,18 +131,8 @@ export const authService = {
       });
 
       if (error) {
-        const raw = error.message ? error.message.toLowerCase() : "";
-        if (
-          raw.includes("already registered") ||
-          raw.includes("already exists") ||
-          raw.includes("user_already_exists")
-        ) {
-          throw new Error("Account already exists. Please log in.");
-        }
-        if (raw.includes("rate limit") || raw.includes("too many requests") || error.status === 429) {
-          throw new Error("Verification email could not be sent right now. Please try again later.");
-        }
-        throw new Error(mapAuthError(error));
+        // Any error on signUp (user exists, email send rate limit 429, etc.) -> prompt to log in
+        throw new Error("Account already exists. Please log in.");
       }
 
       if (data?.user) {
@@ -319,11 +305,7 @@ export const authService = {
         email: cleanEmail,
       });
       if (error) {
-        const raw = error.message ? error.message.toLowerCase() : "";
-        if (raw.includes("rate limit") || raw.includes("too many requests") || error.status === 429) {
-          throw new Error("Verification email could not be sent right now. Please try again later.");
-        }
-        throw new Error(mapAuthError(error));
+        throw new Error("Account already exists. Please log in.");
       }
       return { success: true };
     }
