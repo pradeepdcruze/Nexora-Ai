@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { authService, mapAuthError } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2, Info } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -19,17 +19,26 @@ export default function SignupPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [verificationNotice, setVerificationNotice] = useState("");
 
   const passwordLengthValid = password.length >= 6;
   const passwordHasNumber = /\d/.test(password);
 
   const isSubmittingRef = React.useRef(false);
 
+  // Guarantee fields start empty on mount
+  useEffect(() => {
+    setFullName("");
+    setEmail("");
+    setPassword("");
+  }, []);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingRef.current || loading) return;
 
     setErrorMsg("");
+    setVerificationNotice("");
 
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim();
@@ -40,7 +49,7 @@ export default function SignupPage() {
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
-      setErrorMsg("Please enter a valid email address.");
+      setErrorMsg("Please enter a valid email address with a complete domain (e.g. user@example.com).");
       return;
     }
     if (password.length < 6) {
@@ -51,12 +60,18 @@ export default function SignupPage() {
     try {
       isSubmittingRef.current = true;
       setLoading(true);
-      await authService.signUp(trimmedEmail, password, trimmedName);
-      await refreshUserData();
-      router.push("/dashboard");
+      const res = await authService.signUp(trimmedEmail, password, trimmedName);
+      if (res && (res as any).needsVerification) {
+        setVerificationNotice("Please verify your email address before entering Nexora AI.");
+        setPassword("");
+      } else {
+        await refreshUserData();
+        router.push("/dashboard");
+      }
     } catch (err: any) {
-      console.warn("Signup Error:", err);
-      setErrorMsg(mapAuthError(err));
+      console.warn("Signup error:", err);
+      const msg = typeof err === "string" ? err : err?.message || mapAuthError(err);
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
@@ -78,15 +93,35 @@ export default function SignupPage() {
           </p>
         </div>
 
-        {/* Error Alert */}
-        {errorMsg && (
-          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+        {/* Verification Notice */}
+        {verificationNotice && (
+          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-start gap-2.5">
+            <Info className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold text-white">{verificationNotice}</p>
+              <p className="text-[11px] text-blue-300/80">
+                Check your inbox for a confirmation link from Supabase Auth. Once verified, click below to log in.
+              </p>
+            </div>
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="space-y-4">
+        {/* Error Alert */}
+        {errorMsg && (
+          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+            {errorMsg.includes("already exists") && (
+              <Link href="/auth/login" className="font-bold underline text-blue-400 hover:text-blue-300 shrink-0 text-xs">
+                Log In
+              </Link>
+            )}
+          </div>
+        )}
+
+        <form onSubmit={handleSignup} className="space-y-4" autoComplete="off">
           {/* Full Name */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -98,6 +133,7 @@ export default function SignupPage() {
                 type="text"
                 required
                 value={fullName}
+                autoComplete="off"
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Alex Morgan"
                 className="w-full pl-10 pr-4 py-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
@@ -116,6 +152,7 @@ export default function SignupPage() {
                 type="email"
                 required
                 value={email}
+                autoComplete="off"
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your.email@example.com"
                 className="w-full pl-10 pr-4 py-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
@@ -134,6 +171,7 @@ export default function SignupPage() {
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
+                autoComplete="new-password"
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
                 className="w-full pl-10 pr-10 py-3 text-xs rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { UserProfile } from "@/types";
-import { createEmptyUserData, getLocalUserData } from "./dataStore";
+import { getLocalUserData } from "./dataStore";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -47,14 +47,28 @@ export function mapAuthError(error: any): string {
   }
 
   if (
+    message.includes("email not confirmed") ||
+    message.includes("unverified") ||
+    message.includes("confirm your email")
+  ) {
+    return "Please verify your email address before continuing.";
+  }
+
+  if (
+    message.includes("account not found") ||
+    message.includes("user not found") ||
+    message.includes("no account found")
+  ) {
+    return "Account not found. Please create an account first.";
+  }
+
+  if (
     message.includes("incorrect email") ||
     message.includes("invalid login credentials") ||
     message.includes("invalid credentials") ||
     message.includes("invalid_grant") ||
     message.includes("invalid_credentials") ||
-    message.includes("wrong password") ||
-    message.includes("user not found") ||
-    message.includes("email not confirmed")
+    message.includes("wrong password")
   ) {
     return "Incorrect email or password.";
   }
@@ -75,10 +89,9 @@ export function mapAuthError(error: any): string {
     return "Please enter a valid email address.";
   }
 
-  return "Unable to connect to the server. Please try again.";
+  return raw || "Unable to connect to the server. Please try again.";
 }
 
-// Auth helper service wrapper strictly bound to active user sessions
 export const authService = {
   getCachedUser(): UserProfile | null {
     if (typeof window === "undefined") return null;
@@ -101,7 +114,18 @@ export const authService = {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
-      // 1. Attempt Supabase Auth sign up
+      // 1. Check if profile already exists in Supabase DB
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("email", cleanEmail)
+        .maybeSingle();
+
+      if (existingProfile) {
+        throw new Error("Account already exists. Please log in.");
+      }
+
+      // 2. Attempt Supabase Auth sign up
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
@@ -110,18 +134,28 @@ export const authService = {
         },
       });
 
-      if (data?.user) {
-        // Check if profile already exists for this auth user ID
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", data.user.id)
-          .maybeSingle();
+      if (error) {
+        const raw = error.message ? error.message.toLowerCase() : "";
+        if (
+          raw.includes("already registered") ||
+          raw.includes("already exists") ||
+          raw.includes("user_already_exists")
+        ) {
+          throw new Error("Account already exists. Please log in.");
+        }
+        if (raw.includes("rate limit") || raw.includes("too many requests") || error.status === 429) {
+          throw new Error("Email service is temporarily busy. Please try again shortly.");
+        }
+        throw new Error(mapAuthError(error));
+      }
 
-        const userProfile: UserProfile = existingProfile ? {
-          ...existingProfile,
-          location: sanitizeLocation(existingProfile.location),
-        } : {
+      if (data?.user) {
+        // Supabase identity check: if identities is present and empty, account already exists
+        if (data.user.identities && data.user.identities.length === 0) {
+          throw new Error("Account already exists. Please log in.");
+        }
+
+        const userProfile: UserProfile = {
           id: data.user.id,
           full_name: fullName || cleanEmail.split("@")[0],
           email: cleanEmail,
@@ -134,120 +168,99 @@ export const authService = {
           updated_at: new Date().toISOString(),
         };
 
-        if (!existingProfile) {
-          try {
-            await supabase.from("profiles").upsert({
-              id: data.user.id,
-              full_name: userProfile.full_name,
-              email: cleanEmail,
-              avatar_url: userProfile.avatar_url,
-              headline: userProfile.headline,
-              career_goal: userProfile.career_goal,
-              target_roles: userProfile.target_roles,
-              location: userProfile.location,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: "id" });
-          } catch (e) {
-            console.warn("Profile insert warning:", e);
-          }
-        }
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-        }
-        return data;
-      }
-
-      // 2. If signUp returned an error (e.g. rate limit, user already registered, unconfirmed email):
-      if (error) {
-        console.warn("Supabase Auth signUp warning, attempting login fallback:", error.message);
-
-        // Attempt login with password in case account already exists
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-
-        if (loginData?.user && !loginErr) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", loginData.user.id)
-            .maybeSingle();
-
-          const userProfile: UserProfile = profile ? {
-            ...profile,
-            location: sanitizeLocation(profile.location),
-          } : {
-            id: loginData.user.id,
-            full_name: fullName || cleanEmail.split("@")[0],
+        try {
+          await supabase.from("profiles").upsert({
+            id: data.user.id,
+            full_name: userProfile.full_name,
             email: cleanEmail,
-            avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`,
-            headline: "Early Career Professional",
-            career_goal: "Update target roles in Settings",
-            target_roles: ["Software Engineer"],
-            location: "",
-            created_at: new Date().toISOString(),
+            avatar_url: userProfile.avatar_url,
+            headline: userProfile.headline,
+            career_goal: userProfile.career_goal,
+            target_roles: userProfile.target_roles,
+            location: userProfile.location,
             updated_at: new Date().toISOString(),
-          };
-
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-          }
-          return loginData;
+          }, { onConflict: "id" });
+        } catch (e) {
+          console.warn("Profile insert warning:", e);
         }
 
-        // Create or retrieve user session so existing/new accounts can always log in
-        const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
-        const userStore = getLocalUserData(userId, cleanEmail, fullName);
-        const userProfile = userStore.profile;
-        userProfile.full_name = fullName || userProfile.full_name;
-        userProfile.location = sanitizeLocation(userProfile.location);
+        // Check email verification status
+        const isConfirmed = Boolean(data.user.email_confirmed_at || data.user.confirmed_at || data.session);
+        if (!isConfirmed) {
+          // Unverified email: do not store session cache
+          return { user: data.user, session: null, needsVerification: true };
+        }
 
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
         }
-        return { user: userProfile, session: { token: `token_${userId}` } };
+        return { user: userProfile, session: data.session, needsVerification: false };
       }
     }
 
-    // Fallback demo mode when Supabase env vars are not set
+    // Demo / fallback mode when Supabase is not configured
     const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
     const userStore = getLocalUserData(userId, cleanEmail, fullName);
     const userProfile = userStore.profile;
+    userProfile.full_name = fullName || userProfile.full_name;
     userProfile.location = sanitizeLocation(userProfile.location);
 
     if (typeof window !== "undefined") {
       localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
     }
-    return { user: userProfile, session: { token: `demo_token_${userId}` } };
+    return { user: userProfile, session: { token: `demo_token_${userId}` }, needsVerification: false };
   },
 
   async signIn(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured && supabase) {
-      // 1. Attempt real Supabase Auth signInWithPassword
+      // Check if DB profile exists for this email
+      const { data: dbProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("email", cleanEmail)
+        .maybeSingle();
+
+      // Attempt Supabase Auth signInWithPassword
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      if (!error && data?.user) {
+      if (error) {
+        const raw = error.message ? error.message.toLowerCase() : "";
+        if (raw.includes("email not confirmed") || raw.includes("unverified")) {
+          throw new Error("Please verify your email address before continuing.");
+        }
+        if (raw.includes("invalid login credentials") || raw.includes("invalid credentials")) {
+          if (!dbProfile) {
+            throw new Error("Account not found. Please create an account first.");
+          } else {
+            throw new Error("Incorrect email or password.");
+          }
+        }
+        throw new Error(mapAuthError(error));
+      }
+
+      if (data?.user) {
+        const isConfirmed = Boolean(data.user.email_confirmed_at || data.user.confirmed_at || data.session);
+        if (!isConfirmed) {
+          throw new Error("Please verify your email address before continuing.");
+        }
+
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", data.user.id)
           .maybeSingle();
 
-        const existingStore = getLocalUserData(data.user.id, cleanEmail, data.user.user_metadata?.full_name);
-        
-        const userProfile: UserProfile = profile ? {
+        const activeProfile: UserProfile = profile ? {
           ...profile,
           location: sanitizeLocation(profile.location),
-        } : (existingStore.profile ? {
-          ...existingStore.profile,
-          location: sanitizeLocation(existingStore.profile.location),
+        } : (dbProfile ? {
+          ...dbProfile,
+          location: sanitizeLocation(dbProfile.location),
         } : {
           id: data.user.id,
           full_name: data.user.user_metadata?.full_name || cleanEmail.split("@")[0],
@@ -265,58 +278,28 @@ export const authService = {
           try {
             await supabase.from("profiles").upsert({
               id: data.user.id,
-              full_name: userProfile.full_name,
+              full_name: activeProfile.full_name,
               email: cleanEmail,
-              avatar_url: userProfile.avatar_url,
-              headline: userProfile.headline,
-              career_goal: userProfile.career_goal,
-              target_roles: userProfile.target_roles,
-              location: userProfile.location,
+              avatar_url: activeProfile.avatar_url,
+              headline: activeProfile.headline,
+              career_goal: activeProfile.career_goal,
+              target_roles: activeProfile.target_roles,
+              location: activeProfile.location,
               updated_at: new Date().toISOString(),
             }, { onConflict: "id" });
           } catch (e) {
-            console.warn("Profile upsert on signIn warning:", e);
+            console.warn("Profile upsert warning on signIn:", e);
           }
         }
 
         if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
-        }
-        return data;
-      }
-
-      // 2. If Supabase Auth returns an error (e.g. unconfirmed email or credentials mismatch during rate-limited signups), check if account profile exists in database or local store
-      console.warn("Supabase Auth signIn error, checking existing account profile:", error?.message);
-
-      const { data: dbProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("email", cleanEmail)
-        .maybeSingle();
-
-      const userId = dbProfile?.id || `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
-      const localStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
-
-      if (dbProfile || localStore.profile) {
-        const activeProfile: UserProfile = dbProfile ? {
-          ...dbProfile,
-          location: sanitizeLocation(dbProfile.location),
-        } : {
-          ...localStore.profile,
-          location: sanitizeLocation(localStore.profile.location),
-        };
-
-        if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
         }
-        return { user: activeProfile, session: { token: `token_${userId}` } };
+        return { user: activeProfile, session: data.session };
       }
-
-      // 3. Throw mapped credential error if no account/profile exists anywhere
-      throw new Error(mapAuthError(error));
     }
 
-    // Fallback demo mode when Supabase env vars are not set
+    // Demo / fallback mode when Supabase is not configured
     const userId = `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
     const userStore = getLocalUserData(userId, cleanEmail, cleanEmail.split("@")[0]);
     const activeProfile = userStore.profile;
@@ -326,6 +309,21 @@ export const authService = {
       localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
     }
     return { user: activeProfile, session: { token: `demo_token_${userId}` } };
+  },
+
+  async resendVerificationEmail(email: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: cleanEmail,
+      });
+      if (error) {
+        throw new Error(mapAuthError(error));
+      }
+      return { success: true };
+    }
+    return { success: true };
   },
 
   async signOut() {
@@ -342,7 +340,12 @@ export const authService = {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user) {
-          return this.getCachedUser();
+          return null;
+        }
+
+        const isConfirmed = Boolean(session.user.email_confirmed_at || session.user.confirmed_at);
+        if (!isConfirmed) {
+          return null;
         }
 
         const userEmail = session.user.email || "";
@@ -393,7 +396,7 @@ export const authService = {
         return activeProfile;
       } catch (err) {
         console.warn("Supabase session check error:", err);
-        return this.getCachedUser();
+        return null;
       }
     }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuth } from "@/context/AuthContext";
 import { CAREER_ROLES_TAXONOMY, calculateRoleRecommendations, RoleRecommendation } from "@/lib/careerEngine";
 import {
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function RoleDetailsPage() {
+function RoleDetailsContent() {
   const params = useParams();
   const roleId = params?.roleId as string;
 
@@ -106,184 +107,135 @@ export default function RoleDetailsPage() {
           {/* Back Navigation */}
           <Link
             href="/opportunities"
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Opportunities Hub</span>
+            <span>Back to Opportunity Scanner</span>
           </Link>
 
+          {/* Goal Set Toast */}
           {goalToast && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{goalToast}</span>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between shadow-lg"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span className="font-bold">{goalToast}</span>
+              </div>
+              <Link href="/dashboard" className="underline font-semibold hover:text-emerald-300">
+                View Dashboard
+              </Link>
+            </motion.div>
           )}
 
-          {/* Role Header Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden"
-          >
-            <div className="space-y-3 relative z-10">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase">
-                  {roleData.category}
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-black border ${
-                    roleData.matchScore >= 85
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : roleData.matchScore >= 70
-                      ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                      : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+          {/* Hero Header */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden backdrop-blur-md shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    {roleData.category}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    {roleData.matchLevel}
+                  </span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  {roleData.title}
+                </h1>
+                <p className="text-xs text-slate-400 max-w-xl">
+                  AI-calculated match analysis based on your verified skills, resume experience, and career trajectory.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleSetCareerGoal}
+                  className="px-5 py-3 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+                >
+                  <Target className="w-4 h-4" />
+                  <span>Set as Target Career Goal</span>
+                </button>
+                <button
+                  onClick={() => setIsSaved(!isSaved)}
+                  className={`p-3 rounded-2xl border transition-all ${
+                    isSaved
+                      ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
+                      : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
                   }`}
                 >
-                  {roleData.matchLevel} ({roleData.matchScore}%)
-                </span>
+                  <Bookmark className="w-4 h-4" />
+                </button>
               </div>
-
-              <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                {roleData.title}
-              </h1>
-
-              <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">
-                Personalized alignment computed from your verified skills, project history, and experience.
-              </p>
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-3 shrink-0 relative z-10">
-              <button
-                onClick={() => setIsSaved(!isSaved)}
-                className={`px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all flex items-center gap-2 ${
-                  isSaved
-                    ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                <Bookmark className="w-4 h-4" />
-                <span>{isSaved ? "Saved Role" : "Save Role"}</span>
-              </button>
-
-              <button
-                onClick={handleSetCareerGoal}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
-              >
-                <Target className="w-4 h-4" />
-                <span>Set as Career Goal</span>
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Grid Layout: Match Analysis vs Skill Gaps */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left Column */}
-            <div className="lg:col-span-8 space-y-8">
-              {/* Match Explanation */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-4">
-                <h3 className="text-base font-extrabold text-white pb-3 border-b border-slate-800">
-                  Why This Role Matches You
+          {/* Breakdown Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Matched & Missing Skills */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  Matched Verified Skills ({roleData.matchedSkills.length})
                 </h3>
-                <div className="space-y-3">
-                  {roleData.reasons.map((reason, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-200 font-medium">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <span>{reason}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Matched vs Missing Skills */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
-                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-800 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Matched Skills ({roleData.matchedSkills.length})</span>
-                  </h3>
-                  {roleData.matchedSkills.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {roleData.matchedSkills.map((s, idx) => (
-                        <span key={idx} className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold border border-emerald-500/30">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">No direct skill matches logged yet.</p>
-                  )}
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
-                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-800 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-400" />
-                    <span>Missing Skills ({roleData.missingSkills.length})</span>
-                  </h3>
-                  {roleData.missingSkills.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {roleData.missingSkills.map((s, idx) => (
-                        <span key={idx} className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 text-xs font-bold border border-amber-500/30">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-emerald-400 font-bold">100% Core Skill Coverage!</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Recommended Learning Roadmap */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-                <h3 className="text-base font-extrabold text-white pb-3 border-b border-slate-800 flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-blue-400" />
-                  <span>Actionable Skill Growth Roadmap</span>
-                </h3>
-
-                <div className="space-y-4">
-                  {roleData.recommendedActions.map((action, idx) => (
-                    <div key={idx} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
-                          {idx + 1}
-                        </div>
-                        <p className="text-xs font-bold text-white">{action}</p>
-                      </div>
-                      <Link
-                        href="/interviews"
-                        className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-blue-400 text-xs font-bold hover:bg-slate-800 shrink-0"
+                {roleData.matchedSkills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {roleData.matchedSkills.map((s, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium"
                       >
-                        Practice
-                      </Link>
-                    </div>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">No verified skills matched yet. Upload resume or take quizzes to add skills.</p>
+                )}
+              </div>
+
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  Recommended Skill Gaps ({roleData.missingSkills.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {roleData.missingSkills.map((s, i) => (
+                    <span
+                      key={i}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium"
+                    >
+                      {s}
+                    </span>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Projects & Certifications */}
-            <div className="lg:col-span-4 space-y-8">
-              {/* Projects */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
-                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider pb-3 border-b border-slate-800 flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-blue-400" />
-                  <span>Recommended Projects</span>
+            {/* Recommendations Sidebar */}
+            <div className="space-y-6">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-400" />
+                  Recommended Projects
                 </h3>
                 <div className="space-y-3">
-                  {roleData.recommendedProjects.map((proj, i) => (
-                    <div key={i} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
-                      <h4 className="text-xs font-bold text-white">{proj}</h4>
-                      <p className="text-[11px] text-slate-400">Demonstrates portfolio readiness for {roleData.title}.</p>
+                  {roleData.recommendedProjects.map((p, i) => (
+                    <div key={i} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1">
+                      <h4 className="text-xs font-bold text-slate-200">{p}</h4>
+                      <p className="text-[11px] text-slate-400">Boosts overall role match precision.</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Certifications */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
-                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider pb-3 border-b border-slate-800 flex items-center gap-2">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Award className="w-4 h-4 text-purple-400" />
-                  <span>Recommended Certifications</span>
+                  Certifications
                 </h3>
                 <div className="space-y-3">
                   {roleData.recommendedCertifications.map((cert, i) => (
@@ -299,5 +251,13 @@ export default function RoleDetailsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function RoleDetailsPage() {
+  return (
+    <ProtectedRoute>
+      <RoleDetailsContent />
+    </ProtectedRoute>
   );
 }

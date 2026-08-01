@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { authService, mapAuthError } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoginPage() {
@@ -20,24 +20,38 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
+  const [cooldown, setCooldown] = useState(0);
+  const [resendStatus, setResendStatus] = useState("");
+  const [resending, setResending] = useState(false);
+
   // Guarantee login page fields always open empty
-  React.useEffect(() => {
+  useEffect(() => {
     setEmail("");
     setPassword("");
   }, []);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingRef.current || loading) return;
 
     setErrorMsg("");
+    setResendStatus("");
 
     const trimmedEmail = email.trim();
-    // RFC-compliant Email Format Regex (checks for valid email and domain TLD, e.g. user@domain.com)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
     if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
@@ -58,10 +72,26 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err: any) {
       console.warn("Auth sign in message:", err);
-      setErrorMsg(mapAuthError(err));
+      const msg = typeof err === "string" ? err : err?.message || mapAuthError(err);
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (cooldown > 0 || resending || !email) return;
+    try {
+      setResending(true);
+      setResendStatus("");
+      await authService.resendVerificationEmail(email);
+      setResendStatus("Verification email sent! Please check your inbox.");
+      setCooldown(60);
+    } catch (err: any) {
+      setResendStatus(typeof err === "string" ? err : err?.message || "Failed to resend verification email.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -93,9 +123,44 @@ export default function LoginPage() {
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+              {errorMsg.includes("Account not found") && (
+                <Link href="/auth/signup" className="font-bold underline text-blue-400 hover:text-blue-300 shrink-0 text-xs">
+                  Create Account
+                </Link>
+              )}
+            </div>
+
+            {/* Controlled Resend Option for Unverified Accounts */}
+            {errorMsg.includes("verify your email") && (
+              <div className="pt-2 border-t border-red-500/20 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={cooldown > 0 || resending}
+                  className="w-full py-2 px-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-white font-semibold text-[11px] flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                >
+                  <RefreshCw className={`w-3 h-3 ${resending ? "animate-spin" : ""}`} />
+                  <span>
+                    {resending
+                      ? "Resending..."
+                      : cooldown > 0
+                      ? `Resend Verification (${cooldown}s)`
+                      : "Resend Verification Email"}
+                  </span>
+                </button>
+                {resendStatus && (
+                  <p className="text-[11px] text-emerald-400 text-center font-medium">
+                    {resendStatus}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
