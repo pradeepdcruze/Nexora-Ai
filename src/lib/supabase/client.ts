@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { UserProfile } from "@/types";
-import { getLocalUserData } from "./dataStore";
+import { getLocalUserData, saveLocalUserData } from "./dataStore";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -131,16 +131,14 @@ export const authService = {
           throw new Error("Account already exists. Please log in.");
         }
 
+        const localStore = getLocalUserData(data.user.id, cleanEmail, fullName);
         const userProfile: UserProfile = {
+          ...localStore.profile,
           id: data.user.id,
-          full_name: fullName || cleanEmail.split("@")[0],
+          full_name: fullName || localStore.profile.full_name || cleanEmail.split("@")[0],
           email: cleanEmail,
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName || cleanEmail)}`,
-          headline: "Early Career Professional",
-          career_goal: "Update target roles in Settings",
-          target_roles: ["Software Engineer"],
-          location: "",
-          created_at: new Date().toISOString(),
+          avatar_url: localStore.profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName || cleanEmail)}`,
+          created_at: localStore.profile.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
 
@@ -159,6 +157,9 @@ export const authService = {
         } catch (e) {
           console.warn("Profile insert warning:", e);
         }
+
+        localStore.profile = userProfile;
+        saveLocalUserData(data.user.id, localStore);
 
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(userProfile));
@@ -204,24 +205,17 @@ export const authService = {
           .eq("id", data.user.id)
           .maybeSingle();
 
-        const activeProfile: UserProfile = profile ? {
-          ...profile,
-          location: sanitizeLocation(profile.location),
-        } : (dbProfile ? {
-          ...dbProfile,
-          location: sanitizeLocation(dbProfile.location),
-        } : {
+        const localStore = getLocalUserData(data.user.id, cleanEmail, data.user.user_metadata?.full_name);
+
+        const activeProfile: UserProfile = {
+          ...localStore.profile,
+          ...(dbProfile ? dbProfile : {}),
+          ...(profile ? profile : {}),
           id: data.user.id,
-          full_name: data.user.user_metadata?.full_name || cleanEmail.split("@")[0],
           email: cleanEmail,
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`,
-          headline: "Early Career Professional",
-          career_goal: "Update target roles in Settings",
-          target_roles: ["Software Engineer"],
-          location: "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+          full_name: profile?.full_name || dbProfile?.full_name || localStore.profile?.full_name || data.user.user_metadata?.full_name || cleanEmail.split("@")[0],
+          location: sanitizeLocation(profile?.location || dbProfile?.location || localStore.profile?.location),
+        };
 
         if (!profile) {
           try {
@@ -241,19 +235,29 @@ export const authService = {
           }
         }
 
+        localStore.profile = activeProfile;
+        saveLocalUserData(data.user.id, localStore);
+
         if (typeof window !== "undefined") {
           localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
         }
         return { user: activeProfile, session: data.session };
       }
 
-      // If signInWithPassword returned an error, check if existing profile exists in DB
-      if (dbProfile) {
-        // Valid existing profile found -> grant immediate access
+      // If signInWithPassword returned an error, check if existing profile exists in DB or local store
+      const localStore = getLocalUserData(`usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`, cleanEmail);
+      if (dbProfile || localStore.profile) {
+        const activeProfile: UserProfile = {
+          ...localStore.profile,
+          ...(dbProfile ? dbProfile : {}),
+          email: cleanEmail,
+          location: sanitizeLocation(dbProfile?.location || localStore.profile?.location),
+        };
+        saveLocalUserData(activeProfile.id || `usr_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`, localStore);
         if (typeof window !== "undefined") {
-          localStorage.setItem("nexora_active_user_session", JSON.stringify(dbProfile));
+          localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));
         }
-        return { user: dbProfile, session: { token: `token_${dbProfile.id}` } };
+        return { user: activeProfile, session: { token: `token_${activeProfile.id}` } };
       }
 
       // If no account exists anywhere, return non-existing account message
@@ -293,21 +297,19 @@ export const authService = {
             .eq("id", session.user.id)
             .maybeSingle();
 
-          const activeProfile: UserProfile = profile ? {
-            ...profile,
-            location: sanitizeLocation(profile.location),
-          } : {
+          const localStore = getLocalUserData(session.user.id, userEmail, session.user.user_metadata?.full_name);
+
+          const activeProfile: UserProfile = {
+            ...localStore.profile,
+            ...(profile ? profile : {}),
             id: session.user.id,
-            full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split("@")[0] || "Nexora Member",
-            email: session.user.email || userEmail,
-            avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(session.user.email || "User")}`,
-            headline: "Early Career Professional",
-            career_goal: "Update target roles in Settings",
-            target_roles: ["Software Engineer"],
-            location: "",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            email: userEmail || localStore.profile.email,
+            full_name: profile?.full_name || localStore.profile?.full_name || session.user.user_metadata?.full_name || userEmail.split("@")[0] || "Nexora Member",
+            location: sanitizeLocation(profile?.location || localStore.profile?.location),
           };
+
+          localStore.profile = activeProfile;
+          saveLocalUserData(session.user.id, localStore);
 
           if (typeof window !== "undefined") {
             localStorage.setItem("nexora_active_user_session", JSON.stringify(activeProfile));

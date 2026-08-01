@@ -20,31 +20,86 @@ export function getLocalUserData(userId: string, email?: string, fullName?: stri
     return createEmptyUserData(userId || "guest", email || "", fullName || "");
   }
 
-  const key = `${STORAGE_KEY_PREFIX}${userId}`;
-  const stored = localStorage.getItem(key);
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const primaryKey = `${STORAGE_KEY_PREFIX}${userId}`;
 
-  if (stored) {
+  // 1. Check primary key by userId
+  const primaryStored = localStorage.getItem(primaryKey);
+  if (primaryStored) {
     try {
-      const parsed = JSON.parse(stored) as UserDataStore;
-      // Sanity check to make sure parsed profile matches the user ID
-      if (parsed?.profile?.id === userId) {
+      const parsed = JSON.parse(primaryStored) as UserDataStore;
+      if (parsed && parsed.profile) {
+        if (cleanEmail && !parsed.profile.email) {
+          parsed.profile.email = cleanEmail;
+        }
         return parsed;
       }
     } catch {
-      // Clear corrupt key
-      localStorage.removeItem(key);
+      localStorage.removeItem(primaryKey);
     }
   }
 
+  // 2. Check secondary key by email
+  if (cleanEmail) {
+    const emailKey = `${STORAGE_KEY_PREFIX}email_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+    const emailStored = localStorage.getItem(emailKey);
+    if (emailStored) {
+      try {
+        const parsed = JSON.parse(emailStored) as UserDataStore;
+        if (parsed && parsed.profile) {
+          parsed.profile.id = userId;
+          parsed.profile.email = cleanEmail;
+          localStorage.setItem(primaryKey, JSON.stringify(parsed));
+          return parsed;
+        }
+      } catch {
+        localStorage.removeItem(emailKey);
+      }
+    }
+
+    // 3. Scan all localStorage keys for matching email store
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("nexora_user_")) {
+        try {
+          const item = localStorage.getItem(k);
+          if (item) {
+            const parsed = JSON.parse(item) as UserDataStore;
+            if (parsed && parsed.profile && parsed.profile.email && parsed.profile.email.trim().toLowerCase() === cleanEmail) {
+              parsed.profile.id = userId;
+              parsed.profile.email = cleanEmail;
+              localStorage.setItem(primaryKey, JSON.stringify(parsed));
+              localStorage.setItem(emailKey, JSON.stringify(parsed));
+              return parsed;
+            }
+          }
+        } catch {
+          // ignore parsing error
+        }
+      }
+    }
+  }
+
+  // 4. Create new empty user data store
   const newUserData = createEmptyUserData(userId, email || "", fullName || "");
-  localStorage.setItem(key, JSON.stringify(newUserData));
+  localStorage.setItem(primaryKey, JSON.stringify(newUserData));
+  if (cleanEmail) {
+    const emailKey = `${STORAGE_KEY_PREFIX}email_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+    localStorage.setItem(emailKey, JSON.stringify(newUserData));
+  }
   return newUserData;
 }
 
 export function saveLocalUserData(userId: string, data: UserDataStore) {
   if (typeof window === "undefined" || !userId) return;
-  const key = `${STORAGE_KEY_PREFIX}${userId}`;
-  localStorage.setItem(key, JSON.stringify(data));
+  const primaryKey = `${STORAGE_KEY_PREFIX}${userId}`;
+  localStorage.setItem(primaryKey, JSON.stringify(data));
+
+  const cleanEmail = (data?.profile?.email || "").trim().toLowerCase();
+  if (cleanEmail) {
+    const emailKey = `${STORAGE_KEY_PREFIX}email_${cleanEmail.replace(/[^a-z0-9]/g, "_")}`;
+    localStorage.setItem(emailKey, JSON.stringify(data));
+  }
 }
 
 export function clearUserDataSession(_userId?: string) {
